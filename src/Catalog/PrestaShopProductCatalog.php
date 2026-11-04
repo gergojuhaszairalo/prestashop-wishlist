@@ -21,11 +21,26 @@ class PrestaShopProductCatalog implements ProductCatalogInterface
 
     public function findSavableProduct(int $productId): ?Product
     {
+        $product = $this->findViewableProduct($productId);
+
+        return $product !== null && $product->active ? $product : null;
+    }
+
+    public function canViewProduct(int $productId): bool
+    {
+        return $this->findViewableProduct($productId) !== null;
+    }
+
+    private function findViewableProduct(int $productId): ?Product
+    {
         if ($productId <= 0) {
             return null;
         }
         $product = new Product($productId, false, (int) $this->context->language->id, (int) $this->context->shop->id);
-        if (!Validate::isLoadedObject($product) || !$product->active || !$product->isAssociatedToShop((int) $this->context->shop->id)) {
+        if (!Validate::isLoadedObject($product)
+            || !$product->isAssociatedToShop((int) $this->context->shop->id)
+            || !$product->checkAccess((int) $this->context->customer->id)
+        ) {
             return null;
         }
 

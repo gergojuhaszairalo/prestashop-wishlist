@@ -9,9 +9,15 @@ use Product;
 interface ProductCatalogInterface
 {
     /**
-     * Loads a product that may be saved to a wishlist in the current shop, or null.
+     * Loads an active product the current customer may view in this shop, or null.
      */
     public function findSavableProduct(int $productId): ?Product;
+
+    /**
+     * Checks existence, shop association and the current customer's group access.
+     * Inactive products can still be displayed as unavailable saved items.
+     */
+    public function canViewProduct(int $productId): bool;
 
     /**
      * Normalises the variant to store: the requested combination if it belongs to the

@@ -179,8 +179,11 @@ class Summitwishlist extends Module
      */
     public function messageFor(string $code, string $productName = '', int $quantity = 1): string
     {
-        $params = ['%product%' => $productName, '%quantity%' => $quantity];
         $domain = self::TRANSLATION_DOMAIN;
+        if ($productName === '') {
+            $productName = $this->trans('Unavailable product', [], $domain);
+        }
+        $params = ['%product%' => $productName, '%quantity%' => $quantity];
 
         switch ($code) {
             case 'added':

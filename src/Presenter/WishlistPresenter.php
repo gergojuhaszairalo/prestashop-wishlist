@@ -47,8 +47,15 @@ class WishlistPresenter
         }
 
         $existing = $this->existingProductIds(array_column($items, 'id_product'));
-        $presented = $this->presentProducts(array_filter($items, static function (array $item) use ($existing) {
-            return isset($existing[(int) $item['id_product']]);
+        $viewable = [];
+        foreach (array_keys($existing) as $productId) {
+            if ($this->catalog->canViewProduct((int) $productId)) {
+                $viewable[$productId] = true;
+            }
+        }
+        // Gate catalog assembly itself: a purchase status does not protect metadata.
+        $presented = $this->presentProducts(array_filter($items, static function (array $item) use ($viewable) {
+            return isset($viewable[(int) $item['id_product']]);
         }));
 
         $rows = [];
@@ -56,6 +63,18 @@ class WishlistPresenter
             $itemId = (int) $item['id_wishlist_product'];
             $productId = (int) $item['id_product'];
             $attributeId = (int) $item['id_product_attribute'];
+            if (isset($existing[$productId]) && !isset($viewable[$productId])) {
+                $rows[] = [
+                    'id' => $itemId,
+                    'name' => $this->context->getTranslator()->trans('Unavailable product', [], 'Modules.Summitwishlist.Shop'),
+                    'combination' => '',
+                    'url' => null,
+                    'image' => null,
+                    'price' => null,
+                    'status' => 'no_access',
+                ];
+                continue;
+            }
             $product = $presented[$itemId] ?? null;
 
             if ($product === null) {

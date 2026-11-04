@@ -222,7 +222,11 @@ class WishlistService
         }
         $this->savedCache = [];
 
-        return ['code' => 'removed', 'product_name' => (string) $items[0]['fallback_name']];
+        $name = $this->catalog->canViewProduct((int) $items[0]['id_product'])
+            ? (string) $items[0]['fallback_name']
+            : '';
+
+        return ['code' => 'removed', 'product_name' => $name];
     }
 
     /**
@@ -247,6 +251,10 @@ class WishlistService
             $attributeId = (int) $item['id_product_attribute'];
 
             $check = $this->purchasePolicy->check($productId, $attributeId, $this->cartGateway->getCart());
+            if ($check['product'] !== null && !$this->catalog->canViewProduct($productId)) {
+                $results[] = new CartAdditionResult($itemId, 'no_access', '', 0, 0);
+                continue;
+            }
             $name = $check['product'] ? (string) $check['product']->name : (string) $item['fallback_name'];
             if ($check['code'] !== 'ok') {
                 $results[] = new CartAdditionResult($itemId, $check['code'], $name, $check['quantity'], 0);
