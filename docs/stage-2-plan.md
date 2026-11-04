@@ -36,12 +36,33 @@ Decision 1 was made on 4 Nov 2026. The rest are recommendations I'll follow unle
 6. **Moving:** a dedicated `move` operation in one transaction: insert into the target (`INSERT IGNORE`), then delete from the source. If the target already has the variant, the source entry is still removed and the message says "already in Christmas". This keeps entry IDs stable and is safe against double submits.
 7. **Delete confirmation** reuses the native `<dialog>` from "Empty wishlist". Delete removes the list's entries and the list row. Catalog products are never touched (Scenario 7).
 8. **Limits:** names 1–64 characters after trimming (`Validate::isGenericName`, whitespace collapsed), and at most 20 lists per owner. This guards guest abuse; both limits are constants.
-9. **Guest claim on login (extends 1.0.1):**
-   - the guest's default list merges into the customer's default (as today);
-   - other guest lists are re-assigned to the customer;
-   - if the customer already has a list with the same name, that list absorbs the guest list's items (duplicates dropped);
-   - everything runs in one transaction, with one notice: "N items from your visit were added".
+9. **Guest and customer lists follow the core cart's model.** See §2.1 for the mapping and the deliberate deviations.
 10. **Unauthorised access (Scenario 13):** list IDs come from the URL/POST, so every read and write resolves the list through `WishlistAccessPolicy`. A foreign or unknown ID renders as **not found** (404 page / `not_found` code), never 403, so IDs can't be probed for existence.
+
+## 2.1 Guest ↔ customer model: based on the core cart
+
+General direction (decided 4 Nov 2026): **handle guest and logged-in lists the way PrestaShop handles the cart.** Below is how the cart does it in 9.2.0 (`FrontController::init()` lines 360–464, `Context::updateCustomer()` lines 350–426, `Cookie::mylogout()`), and how each rule maps onto wishlists.
+
+| # | Core cart behaviour (verified in source) | Wishlist rule |
+|---|---|---|
+| 1 | **One row, owner columns, no separate guest storage.** A cart row has `id_customer` (0 for guests) and `id_guest`; the browser points to it with one cookie value (`id_cart`). | **Same:** list rows carry the owner (`owner_key`, `id_customer`); the browser holds one value (`swl_guest`, hashed into `owner_key`). Stage 1 already works this way. No change. |
+| 2 | **Identity is attached by updating the row, not copying it.** On login, the visitor's cart gets `id_customer` set and is saved (`updateCustomer`, lines 391–419). | **Same:** guest lists are **re-assigned** (`owner_key` and `id_customer` updated in place), so list IDs and item IDs survive login. Copy-and-delete is used only where a merge is unavoidable (row 5). |
+| 3 | **Reconciliation happens on every request, early.** In `init()`, if the cookie's customer differs from the cart's, the cart is updated (lines 397–410). This catches every login path, whatever controller or module logged the customer in. | **Same, moved earlier:** the lazy claim moves from `actionFrontControllerSetMedia` to **`actionFrontControllerInitAfter`**. That hook fires at the end of `init()`, right after core resolved the cart, and before `setMedia`, `postProcess` and the notifications are assigned. It still covers login, registration, password reset, cart recovery and social-login modules. The new hook is registered in `upgrade-1.1.0.php` (§5.3). Behaviour is identical to 1.0.1, only earlier in the request. |
+| 4 | **Nothing is persisted until it is needed.** A visitor without a cart gets an unsaved `new Cart()`, which gets an ID on first save (lines 438–460). | **Not adopted; keep 1.0.1 behaviour** (the token is created early in the request on the first page view). Creating `swl_guest` only on the first wishlist write would need a CSRF binding that exists before that write. The only candidate in the core cookie, `id_guest`, is **not** set by core for anonymous visitors: in 9.2.0 it's assigned by the optional `statsdata` module (`Cookie::makeNewLog()`), or by `updateCustomer` at login. Binding CSRF to it would break the first click on shops without statsdata. The cost of keeping it is one extra `Set-Cookie` on a visitor's **first** page only; returning visitors get none (measured after the 502 fix). Lists themselves stay lazy as in the cart: no row until the first save. |
+| 5 | **Conflicts: the visitor's current basket wins; an old account cart is left behind, never merged** (lines 374–380 restore the account's last cart only when the visitor's is empty, with `PS_CART_FOLLOWING`). | **Deliberate deviation, because lists are long-lived:** an account's existing lists are never dropped or replaced. In one transaction: the guest **default** list merges into the account default (duplicates dropped by the unique key); a guest list whose name matches an account list (case-insensitive, trimmed) merges into it; every other guest list is **re-assigned** (row 2). One notice reports the number of items that are new to the account. |
+| 6 | **Guest has nothing → the account's data simply appears.** That is the `PS_CART_FOLLOWING` "re-display cart at login" case. | **Same, always on:** if the guest has no lists, login just shows the account's lists. There is nothing to merge and no notice. |
+| 7 | **Logout detaches; the account keeps its data.** `Cookie::mylogout()` unsets `id_cart`, so the next request starts an empty basket while the account's cart stays on the account. | **Same:** after a claim the guest token is forgotten (1.0.1 already does this), so a logout starts an empty guest wishlist and the account's lists stay with the account. Visitors who logged in with no guest lists also get their token dropped, so nothing reappears after logout. |
+| 8 | **Guest-checkout customers are customers.** `updateCustomer` sets `id_customer` on the cart for them too (`is_guest` only changes the cookie flag); `Customer::transformToCustomer()` later turns the same `id_customer` into a full account. | **Adopt (changes the 1.0.1 decision):** when a guest-checkout customer is in context, their lists are attached to that `id_customer` (same claim as row 5), not only to the cookie. A later conversion to a full account then keeps the lists with no extra step, and they survive cookie loss like the cart does. This needs `OwnerResolver` to treat `is_guest` customers as customers (`isLogged(true)`). |
+| 9 | **The cookie reference is re-validated each request.** A cart that is deleted or already ordered is dropped from the cookie (lines 373–376). | **Same:** a guest token whose lists no longer exist resolves to an empty guest (as today). An owner with lists but no default is repaired on read (§5.1), not trusted. |
+| 10 | **Scope:** carts carry `id_shop` / `id_shop_group`. | **Same:** lists stay scoped to `id_shop`. Claims only move lists of the current shop. |
+
+**Not copied from the cart, on purpose**
+- **The cart trusts the `id_cart` in the cookie.** Wishlists never take a list ID from the cookie or the request as proof of ownership: every access goes through `WishlistAccessPolicy` (decision 10).
+- **No `PS_CART_FOLLOWING`-style setting.** Lists are always kept, so there is nothing to toggle.
+
+**Backward compatibility of these changes** (checked against §5)
+- Rows 1–4, 6, 7, 9 and 10 match 1.0.1 behaviour. Row 3 only moves the claim earlier in the request.
+- Row 8 widens who counts as a customer. A guest-checkout customer's existing cookie list is claimed on their next request, which is the same mechanism as a login, and nothing is lost.
 
 ## 3. Behaviour by screen
 
@@ -173,7 +194,13 @@ Rule: **a shop running 1.0.1 must be able to replace the files, click Upgrade, a
 2. **Wishlist page:** list navigation, `?list=`, create with validation, rename, delete with confirmation, per-list items/cart/empty. *Checkpoint: Scenarios 1–3, 6–8, 10, 14.* *(60 min)*
 3. **Move between lists.** *Checkpoint: Scenario 9.* *(20 min)*
 4. **Picker:** `for_variant` endpoint, checkbox dialog, `save_to_lists`, no-JS picker page, heart "saved in any list". *Checkpoint: Scenarios 4, 5.* *(60 min)*
-5. **Guest/customer:** multi-list claim, persistence checks. *Checkpoint: Scenarios 11, 12, 13.* *(30 min)*
+5. **Guest/customer, following the cart model (§2.1):**
+   - move the claim to `actionFrontControllerInitAfter` (registered in the upgrade script);
+   - multi-list claim (re-assign, merge default and same-name lists);
+   - guest-checkout customers attached by `id_customer`;
+   - persistence checks.
+
+   *Checkpoint: Scenarios 11, 12, 13.* *(40 min)*
 6. **Backward-compatibility gate (§5.4):** upgrade rehearsal, unmodified Stage 1 suite on fresh and upgraded shops, schema diff, rollback check; then README/changelog. *(45 min)*
 
 ## 7. Test plan (Playwright additions, `tests/e2e/multi-list.spec.ts`)
@@ -196,6 +223,10 @@ Rule: **a shop running 1.0.1 must be able to replace the files, click Upgrade, a
 | 11 Customer persistence (`@account`) | logout/login → Birthday and items still there |
 | 12 Guest multi-list | create two, add to Birthday, reload → both lists, item in Birthday |
 | 13 Unauthorised | guest B opens/posts A's list ID → not found, nothing changes |
+| Claim: re-assign (`@account`) | guest creates "Birthday" + adds items → logs in to an account without lists → same list ID now on the account, items intact |
+| Claim: merge (`@account`) | guest default + "Birthday" → account already has default + "birthday" → merged into the existing two, no duplicates, one notice |
+| Claim: logout (`@account`) | after any claim, logout → empty guest wishlist; account lists unchanged |
+| Guest checkout (`@account`) | guest-checkout order while holding a list → list attached to that customer; converting to an account keeps it |
 | 14 Cart per list | select two in Christmas → in cart, still in Christmas, other lists unchanged |
 | Default: first created | first list of a new owner is default; creating more doesn't change it |
 | Default: mark | "Set as default" on Birthday → badge moves, header count shows Birthday's count, `/wishlist` opens Birthday, single-list toggles target it |
