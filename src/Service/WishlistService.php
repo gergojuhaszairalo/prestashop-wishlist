@@ -230,6 +230,40 @@ class WishlistService
     }
 
     /**
+     * Removes several items at once (the "also remove from wishlist" choice after a cart add).
+     *
+     * @param int[] $itemIds items outside this list are ignored
+     *
+     * @return int|null removed count, null when the list is not accessible
+     */
+    public function removeItems(WishlistOwner $owner, int $wishlistId, array $itemIds): ?int
+    {
+        $wishlist = $this->repository->find($wishlistId);
+        if ($wishlist === null || !$this->accessPolicy->canEdit($owner, $wishlist)) {
+            return null;
+        }
+        $this->savedCache = [];
+
+        return $this->repository->removeItems($wishlistId, $itemIds);
+    }
+
+    /**
+     * Empties the list. The list itself (and its ID) is kept.
+     *
+     * @return int|null removed count, null when the list is not accessible
+     */
+    public function clear(WishlistOwner $owner, int $wishlistId): ?int
+    {
+        $wishlist = $this->repository->find($wishlistId);
+        if ($wishlist === null || !$this->accessPolicy->canEdit($owner, $wishlist)) {
+            return null;
+        }
+        $this->savedCache = [];
+
+        return $this->repository->clearItems($wishlistId);
+    }
+
+    /**
      * Adds selected items to the visitor's cart. Items outside the list are ignored,
      * each item is rechecked now, and the wishlist itself is never changed.
      *

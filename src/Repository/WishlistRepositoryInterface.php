@@ -38,6 +38,18 @@ interface WishlistRepositoryInterface
 
     public function removeItem(int $wishlistId, int $itemId): bool;
 
+    /**
+     * @param int[] $itemIds only items of this wishlist are touched
+     *
+     * @return int number of items removed
+     */
+    public function removeItems(int $wishlistId, array $itemIds): int;
+
+    /**
+     * @return int number of items removed
+     */
+    public function clearItems(int $wishlistId): int;
+
     public function deleteByCustomer(int $customerId): void;
 
     /**

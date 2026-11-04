@@ -155,6 +155,32 @@ class DbWishlistRepository implements WishlistRepositoryInterface
         return $removed;
     }
 
+    public function removeItems(int $wishlistId, array $itemIds): int
+    {
+        $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+        if (!$itemIds) {
+            return 0;
+        }
+        $this->db->delete(self::ITEMS, '`id_wishlist` = ' . $wishlistId . ' AND `id_wishlist_product` IN (' . implode(',', $itemIds) . ')');
+        $removed = (int) $this->db->Affected_Rows();
+        if ($removed > 0) {
+            $this->touch($wishlistId);
+        }
+
+        return $removed;
+    }
+
+    public function clearItems(int $wishlistId): int
+    {
+        $this->db->delete(self::ITEMS, '`id_wishlist` = ' . $wishlistId);
+        $removed = (int) $this->db->Affected_Rows();
+        if ($removed > 0) {
+            $this->touch($wishlistId);
+        }
+
+        return $removed;
+    }
+
     public function deleteByCustomer(int $customerId): void
     {
         $this->db->execute(

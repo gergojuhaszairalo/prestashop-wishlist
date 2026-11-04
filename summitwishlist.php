@@ -210,6 +210,12 @@ class Summitwishlist extends Module
                 return $this->trans('"%product%" must be bought in a larger quantity.', $params, $domain);
             case 'max_quantity':
                 return $this->trans('You already have the maximum available quantity of "%product%" in your cart.', $params, $domain);
+            case 'removed_many':
+                return $quantity === 1
+                    ? $this->trans('1 product was removed from your wishlist.', [], $domain)
+                    : $this->trans('%quantity% products were removed from your wishlist.', $params, $domain);
+            case 'cleared':
+                return $this->trans('Your wishlist is now empty.', [], $domain);
             case 'claimed':
                 return $quantity === 1
                     ? $this->trans('1 item from your visit was added to your wishlist.', [], $domain)

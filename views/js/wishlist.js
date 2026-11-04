@@ -207,9 +207,79 @@
     sync();
   }
 
+  // Native <dialog>: showModal() traps focus and handles Escape; the opener gets focus back.
+  // Without dialog support (or JS) the confirm buttons simply submit, and the post-cart
+  // prompt stays as the inline panel it is rendered as.
+  var supportsDialog = typeof HTMLDialogElement === 'function' && 'showModal' in HTMLDialogElement.prototype;
+
+  function openModal(dialog, opener) {
+    if (dialog.open) {
+      // Server-rendered open (no-JS panel). Drop the attribute rather than close(): close()
+      // queues a "close" event that would fire the listener below before the user acts.
+      dialog.removeAttribute('open');
+    }
+    dialog.showModal();
+    dialog.addEventListener('close', function onClose() {
+      dialog.removeEventListener('close', onClose);
+      if (opener && typeof opener.focus === 'function') {
+        opener.focus();
+      }
+      if (dialog.id === 'sw-post-cart') {
+        forgetJustAdded();
+      }
+    });
+  }
+
+  /** Drops swl_added from the URL so a reload or "back" doesn't ask again. */
+  function forgetJustAdded() {
+    if (!window.history || !window.history.replaceState) {
+      return;
+    }
+    var url = new URL(window.location.href);
+    if (url.searchParams.has('swl_added')) {
+      url.searchParams.delete('swl_added');
+      window.history.replaceState(null, '', url.toString());
+    }
+  }
+
+  function initDialogs() {
+    if (!supportsDialog) {
+      return;
+    }
+    document.addEventListener('click', function (event) {
+      var opener = event.target.closest('[data-sw-confirm]');
+      if (opener) {
+        var dialog = document.getElementById(opener.getAttribute('data-sw-confirm'));
+        if (dialog) {
+          event.preventDefault();
+          openModal(dialog, opener);
+        }
+        return;
+      }
+      var closer = event.target.closest('[data-sw-dialog-close]');
+      if (closer) {
+        var owner = closer.closest('dialog');
+        if (owner) {
+          event.preventDefault(); // "Keep in wishlist" is a link for the no-JS case
+          owner.close();
+        }
+      }
+    });
+
+    document.querySelectorAll('dialog[data-sw-autoshow]').forEach(function (dialog) {
+      dialog.classList.remove('sw-dialog--inline');
+      openModal(dialog, null);
+      var first = dialog.querySelector('.btn');
+      if (first) {
+        first.focus();
+      }
+    });
+  }
+
   function init() {
     placeHearts();
     observeListings();
+    initDialogs();
     document.querySelectorAll('[data-sw-wishlist-form]').forEach(initSelection);
     if (window.prestashop && typeof window.prestashop.on === 'function') {
       window.prestashop.on('updateProductList', function () { placeHearts(); });

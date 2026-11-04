@@ -43,21 +43,33 @@ class SummitwishlistCartModuleFrontController extends ModuleFrontController
 
         $added = [];
         $failed = [];
+        $addedItemIds = [];
         foreach ($results as $result) {
             if ($result->isAdded()) {
                 $added[] = $this->module->messageFor('cart_added', $result->productName, $result->addedQuantity);
+                $addedItemIds[] = $result->itemId;
             } else {
                 $failed[] = $this->module->messageFor($result->code, $result->productName);
             }
         }
 
         if ($this->wantsJson()) {
-            $this->respond(!$failed, array_merge($added, $failed), ['added' => count($added), 'failed' => count($failed)]);
+            $this->respond(!$failed, array_merge($added, $failed), [
+                'added' => count($added),
+                'failed' => count($failed),
+                'added_item_ids' => $addedItemIds,
+            ]);
         }
 
-        // Partial success: show what worked and what didn't, per item.
+        // Partial success: show what worked and what didn't, per item. The wishlist page then
+        // asks whether the added items should also leave the wishlist (opt-in; default keeps them).
+        // Only item IDs travel in the URL; the page re-checks them against the visitor's own list.
         $this->success = $added;
         $this->errors = $failed;
-        $this->redirectWithNotifications($this->module->getWishlistUrl());
+        $url = $this->module->getWishlistUrl();
+        if ($addedItemIds) {
+            $url .= (strpos($url, '?') === false ? '?' : '&') . 'swl_added=' . implode(',', $addedItemIds);
+        }
+        $this->redirectWithNotifications($url);
     }
 }

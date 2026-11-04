@@ -11,6 +11,7 @@
     </p>
 
     {include file='module:summitwishlist/views/templates/_partials/feedback.tpl'}
+    {include file='module:summitwishlist/views/templates/_partials/post-cart-prompt.tpl'}
 
     {if $swl_items}
       {* One form: "Add to cart" and "Add selected" post to the cart controller,
@@ -26,8 +27,15 @@
               {l s='Select available items' d='Modules.Summitwishlist.Shop'}
             </label>
           </div>
-          <span class="sw-toolbar__selected" data-sw-selected-count aria-live="polite"
-                data-sw-label="{l s='%count% selected' d='Modules.Summitwishlist.Shop'}"></span>
+          <div class="sw-toolbar__end">
+            <span class="sw-toolbar__selected" data-sw-selected-count aria-live="polite"
+                  data-sw-label="{l s='%count% selected' d='Modules.Summitwishlist.Shop'}"></span>
+            {* Belongs to #sw-clear-form (outside this form) via the form attribute; with JS it opens a confirmation first. *}
+            <button type="submit" form="sw-clear-form" class="btn btn-link sw-action sw-clear" data-sw-confirm="sw-clear-dialog">
+              <i class="material-icons" aria-hidden="true">&#xE872;</i>
+              {l s='Empty wishlist' d='Modules.Summitwishlist.Shop'}
+            </button>
+          </div>
         </div>
 
         <ul class="sw-list list-unstyled">
@@ -47,6 +55,26 @@
           </a>
         </div>
       </form>
+
+      <form id="sw-clear-form" action="{$swl_item_url|escape:'htmlall':'UTF-8'}" method="post" hidden>
+        <input type="hidden" name="swl_token" value="{$swl_token|escape:'htmlall':'UTF-8'}">
+        <input type="hidden" name="op" value="clear">
+      </form>
+
+      <dialog class="sw-dialog" id="sw-clear-dialog" aria-labelledby="sw-clear-title" aria-describedby="sw-clear-text">
+        <h2 class="sw-dialog__title" id="sw-clear-title">{l s='Empty your wishlist?' d='Modules.Summitwishlist.Shop'}</h2>
+        <p class="sw-dialog__text" id="sw-clear-text">
+          {l s='This removes all %count% saved products. Your cart is not affected.' sprintf=['%count%' => $swl_items|count] d='Modules.Summitwishlist.Shop'}
+        </p>
+        <div class="sw-dialog__actions">
+          <button type="button" class="btn btn-outline-primary sw-action" data-sw-dialog-close>
+            {l s='Cancel' d='Shop.Theme.Actions'}
+          </button>
+          <button type="submit" form="sw-clear-form" class="btn btn-danger sw-action">
+            {l s='Empty wishlist' d='Modules.Summitwishlist.Shop'}
+          </button>
+        </div>
+      </dialog>
     {else}
       {include file='module:summitwishlist/views/templates/_partials/empty.tpl'}
     {/if}

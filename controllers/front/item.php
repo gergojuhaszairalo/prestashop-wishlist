@@ -6,7 +6,8 @@ use Summit\Wishlist\Controller\RespondsToShopper;
 use Summit\Wishlist\Security\CsrfTokenManager;
 
 /**
- * POST op=add|remove. Guests are allowed; ownership comes from the server-side context.
+ * POST op=add|toggle|remove|remove_selected|clear. Guests are allowed; ownership comes
+ * from the server-side context.
  *
  * @property Summitwishlist $module
  */
@@ -53,6 +54,20 @@ class SummitwishlistItemModuleFrontController extends ModuleFrontController
                         'id_product' => $result['id_product'] ?? null,
                         'id_product_attribute' => $result['id_product_attribute'] ?? null,
                     ]
+                );
+                break;
+
+            case 'remove_selected': // "also remove from wishlist" after a cart add
+            case 'clear': // "Empty wishlist"
+                $wishlist = $service->getDefaultWishlist($owner);
+                $selected = Tools::getValue('ids');
+                $removed = !$wishlist ? null : ($op === 'clear'
+                    ? $service->clear($owner, (int) $wishlist['id_wishlist'])
+                    : $service->removeItems($owner, (int) $wishlist['id_wishlist'], is_array($selected) ? array_map('intval', $selected) : []));
+                $this->respond(
+                    $removed !== null && $removed > 0,
+                    [$this->module->messageFor($removed ? ($op === 'clear' ? 'cleared' : 'removed_many') : 'not_found', '', (int) $removed)],
+                    ['code' => $op, 'removed' => (int) $removed, 'count' => $service->countItems($owner)]
                 );
                 break;
 

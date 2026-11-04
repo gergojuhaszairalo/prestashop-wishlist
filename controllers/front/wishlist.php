@@ -20,8 +20,17 @@ class SummitwishlistWishlistModuleFrontController extends ModuleFrontController
         $items = $wishlist ? $service->getItems($owner, (int) $wishlist['id_wishlist']) : [];
 
         $presented = $services->presenter()->present($items);
+
+        // Items just added to the cart (from the redirect), limited to this visitor's own rows.
+        $justAdded = array_map('intval', explode(',', (string) Tools::getValue('swl_added')));
+        $addedItems = array_values(array_filter($presented, static function (array $item) use ($justAdded) {
+            return in_array($item['id'], $justAdded, true);
+        }));
+
         $this->context->smarty->assign([
             'swl_items' => $presented,
+            'swl_added_items' => $addedItems,
+            'swl_wishlist_url' => $this->module->getWishlistUrl(),
             'swl_available_count' => count(array_filter($presented, static function (array $item) {
                 return $item['status'] === 'ok';
             })),
