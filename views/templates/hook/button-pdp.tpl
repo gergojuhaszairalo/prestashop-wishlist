@@ -15,6 +15,8 @@
     name="op"
     value="toggle"
     data-summitwishlist-action="toggle"
+    data-sw-multi="{if $swl_multi}1{else}0{/if}"
+    data-sw-picker-url="{$swl_picker_url|escape:'htmlall':'UTF-8'}"
     data-sw-product="{$swl_id_product|intval}"
     data-sw-attribute="{$swl_id_product_attribute|intval}"
     data-sw-text-add="{l s='Add to wishlist' d='Modules.Summitwishlist.Shop'}"

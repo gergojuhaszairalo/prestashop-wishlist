@@ -35,8 +35,14 @@ class SummitwishlistCartModuleFrontController extends ModuleFrontController
         }
 
         $service = $services->wishlistService();
-        $wishlist = $service->getDefaultWishlist($owner);
+        // Explicit list must be the visitor's (no fallback); none given → default (Stage 1 contract).
+        $wishlist = Tools::getIsset('id_wishlist')
+            ? $services->listManager()->findList($owner, (int) Tools::getValue('id_wishlist'))
+            : $service->getDefaultWishlist($owner);
         $results = $wishlist ? $service->addItemsToCart($owner, (int) $wishlist['id_wishlist'], $itemIds) : null;
+        if ($wishlist === null && Tools::getIsset('id_wishlist')) {
+            $this->respond(false, [$this->module->messageFor('list_not_found')], ['code' => 'list_not_found']);
+        }
         if (!$results) {
             $this->respond(false, [$this->module->messageFor('not_found')]);
         }
@@ -66,7 +72,10 @@ class SummitwishlistCartModuleFrontController extends ModuleFrontController
         // Only item IDs travel in the URL; the page re-checks them against the visitor's own list.
         $this->success = $added;
         $this->errors = $failed;
-        $url = $this->module->getWishlistUrl();
+        // Back to the same list, so its prompt and rows stay in context.
+        $url = Tools::getIsset('id_wishlist')
+            ? $this->module->getWishlistUrl(['list' => (int) $wishlist['id_wishlist']])
+            : $this->module->getWishlistUrl();
         if ($addedItemIds) {
             $url .= (strpos($url, '?') === false ? '?' : '&') . 'swl_added=' . implode(',', $addedItemIds);
         }

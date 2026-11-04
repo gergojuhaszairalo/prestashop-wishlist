@@ -17,6 +17,8 @@
     type="submit"
     class="btn sw-heart sw-icon-action{if $swl_saved} is-saved{/if}"
     data-summitwishlist-action="toggle"
+    data-sw-multi="{if $swl_multi}1{else}0{/if}"
+    data-sw-picker-url="{$swl_picker_url|escape:'htmlall':'UTF-8'}"
     data-sw-product="{$swl_id_product|intval}"
     data-sw-attribute="{$swl_id_product_attribute|intval}"
     data-sw-title-add="{$smarty.capture.swl_title_add|trim|escape:'htmlall':'UTF-8'}"

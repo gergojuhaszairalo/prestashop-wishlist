@@ -48,8 +48,14 @@ trait RespondsToShopper
         $this->redirectWithNotifications($this->backUrl());
     }
 
+    /** @var string explicit no-JS return target (e.g. the list an action came from); wins over the Referer */
+    protected $returnTo = '';
+
     private function backUrl(): string
     {
+        if ($this->returnTo !== '') {
+            return $this->returnTo;
+        }
         $referrer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
         if ($referrer !== '' && Tools::urlBelongsToShop($referrer)) {
             return $referrer;

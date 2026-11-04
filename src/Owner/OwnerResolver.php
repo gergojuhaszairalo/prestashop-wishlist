@@ -27,7 +27,9 @@ class OwnerResolver
         $shopId = (int) $this->context->shop->id;
         $customer = $this->context->customer;
 
-        if ($customer && $customer->isLogged()) {
+        // isLogged(true) includes guest-checkout customers: like the core cart, their lists are
+        // attached to their id_customer, so converting to a full account keeps them.
+        if ($customer && $customer->isLogged(true)) {
             return new WishlistOwner($shopId, 'customer:' . (int) $customer->id, (int) $customer->id);
         }
 
@@ -51,7 +53,7 @@ class OwnerResolver
     {
         $customer = $this->context->customer;
         $token = $this->guestToken();
-        if (!$customer || !$customer->isLogged() || $token === null) {
+        if (!$customer || !$customer->isLogged(true) || $token === null) {
             return null;
         }
 

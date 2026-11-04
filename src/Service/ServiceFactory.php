@@ -17,7 +17,7 @@ use Summit\Wishlist\Repository\DbWishlistRepository;
 use Summit\Wishlist\Security\CsrfTokenManager;
 
 /**
- * Explicit wiring for Stage 1. Works in front office, back office and install code
+ * Explicit wiring. Works in front office, back office and install code
  * without a Symfony cache rebuild; replace with config/common.yml when the API needs DI.
  */
 class ServiceFactory
@@ -30,6 +30,8 @@ class ServiceFactory
     private $owner;
     /** @var int */
     private $claimed = 0;
+    /** @var int */
+    private $claimRenamed = 0;
 
     public function __construct(Context $context)
     {
@@ -56,9 +58,17 @@ class ServiceFactory
     }
 
     /**
-     * Lazy claim: the first request after any login path moves the guest list into the
-     * account. Idempotent: the guest token is forgotten afterwards; on failure it is kept
-     * so the next request retries, and the page still renders.
+     * Claimed guest lists renamed on this request because the account had a list of that name.
+     */
+    public function claimRenamedCount(): int
+    {
+        return $this->claimRenamed;
+    }
+
+    /**
+     * Lazy claim, modelled on the core cart: the first request after any login path moves the
+     * guest's lists into the account. Idempotent: the guest token is forgotten only after the
+     * claim committed; on failure it is kept so the next request retries, and the page renders.
      */
     private function claimPendingGuestList(OwnerResolver $resolver, WishlistOwner $owner): void
     {
@@ -67,7 +77,10 @@ class ServiceFactory
             return;
         }
         try {
-            $this->claimed = $this->wishlistService()->claimGuestList($guest, $owner);
+            $result = $this->listManager()->claimGuestLists($guest, $owner);
+            $this->claimed = $result['items'];
+            $this->claimRenamed = $result['renamed'];
+            $this->wishlistService()->forgetSavedState();
             $resolver->forgetGuest();
         } catch (\Throwable $e) {
             PrestaShopLogger::addLog('summitwishlist: guest list claim failed: ' . $e->getMessage(), 2, null, 'Customer', (int) $owner->getCustomerId());
@@ -98,6 +111,16 @@ class ServiceFactory
             new PurchasePolicy($this->context, $this->catalog()),
             new PrestaShopCartGateway($this->context),
             $this->context->getTranslator()->trans('My wishlist', [], 'Modules.Summitwishlist.Shop')
+        );
+    }
+
+    public function listManager(): WishlistListManager
+    {
+        return $this->instances['lists'] ??= new WishlistListManager(
+            $this->repository(),
+            new WishlistAccessPolicy(),
+            $this->catalog(),
+            new WishlistNameValidator()
         );
     }
 

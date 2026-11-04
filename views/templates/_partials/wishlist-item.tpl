@@ -61,6 +61,14 @@
         {l s='Add to cart' d='Shop.Theme.Actions'}
       </button>
     {/if}
+    {if $swl_lists|count > 1}
+      {* Also for unavailable rows: organising existing entries is always allowed. *}
+      <a class="btn btn-outline-primary sw-action sw-move" href="{$swl_self_url|escape:'htmlall':'UTF-8'}&amp;move={$item.id|intval}"
+         data-sw-confirm="sw-move-dialog-{$item.id|intval}">
+        <i class="material-icons" aria-hidden="true">&#xE8D4;</i>
+        {l s='Move' d='Modules.Summitwishlist.Shop'}<span class="visually-hidden"> {$item.name|escape:'htmlall':'UTF-8'}</span>
+      </a>
+    {/if}
     {capture name='swl_remove_label'}{l s='Remove %product% from wishlist' sprintf=['%product%' => $item.name] d='Modules.Summitwishlist.Shop'}{/capture}
     <button type="submit" formaction="{$swl_item_url|escape:'htmlall':'UTF-8'}" name="id_item" value="{$item.id|intval}"
             class="btn btn-outline-tertiary sw-icon-action sw-remove"

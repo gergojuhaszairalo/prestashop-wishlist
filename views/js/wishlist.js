@@ -97,6 +97,9 @@
     })
       .then(function (response) { return response.json(); })
       .then(function (json) {
+        if (json.code === 'needs_picker') {
+          return json; // the caller opens the picker; nothing was written
+        }
         // Trust the application result, not the HTTP status.
         notify(json.messages || [], json.success === true);
         if (json.success === true) {
@@ -126,11 +129,206 @@
     data.delete('token');
     data.delete('qty');
 
+    // 2+ lists: edit memberships in the picker (nothing is written until Save changes).
+    if (trigger.getAttribute('data-sw-multi') === '1') {
+      openPicker(pickerUrl(trigger, data), trigger);
+      return;
+    }
+
     trigger.disabled = true;
     add(url, data, { op: trigger.getAttribute('data-summitwishlist-action') })
+      .then(function (json) {
+        // The visitor got a second list in another tab since this page rendered.
+        if (json && json.code === 'needs_picker' && json.picker_url) {
+          openPicker(json.picker_url, trigger);
+        }
+      })
       .catch(function () { notify([(window.summitWishlistI18n || {}).error || 'Error'], false); })
       .finally(function () { trigger.disabled = false; });
   });
+
+  // ---- Membership picker ("Save to wishlists") -----------------------------------------
+
+  var pickerDialog = null;
+  var pickerSourceUrl = null;
+  var pickerOpener = null;
+
+  /** Picker URL for a trigger: the rendered variant (cards) or the PDP's current group[] choices. */
+  function pickerUrl(trigger, formData) {
+    var url = new URL(trigger.getAttribute('data-sw-picker-url'), window.location.href);
+    url.searchParams.set('id_product', trigger.getAttribute('data-sw-product'));
+    var hasGroups = false;
+    formData.forEach(function (value, key) {
+      if (key.indexOf('group[') === 0) {
+        url.searchParams.set(key, String(value));
+        hasGroups = true;
+      }
+    });
+    // PDP: the server resolves the current group[] choices; cards: the rendered combination.
+    url.searchParams.set('id_product_attribute', hasGroups
+      ? '0'
+      : (formData.get('swl_id_product_attribute') || trigger.getAttribute('data-sw-attribute') || '0'));
+    return url.toString();
+  }
+
+  function ensurePickerDialog() {
+    if (!pickerDialog) {
+      pickerDialog = document.createElement('dialog');
+      pickerDialog.className = 'sw-dialog sw-picker-dialog';
+      pickerDialog.setAttribute('aria-labelledby', 'sw-picker-title');
+      document.body.appendChild(pickerDialog);
+      pickerDialog.addEventListener('change', updatePickerSummary);
+      pickerDialog.addEventListener('submit', onPickerSubmit);
+      pickerDialog.addEventListener('click', function (event) {
+        if (event.target.closest('[data-sw-dialog-close]')) {
+          event.preventDefault();
+          pickerDialog.close();
+        }
+      });
+    }
+    return pickerDialog;
+  }
+
+  function loadPicker(url) {
+    var fragmentUrl = new URL(url, window.location.href);
+    fragmentUrl.searchParams.set('fragment', '1');
+    return fetch(fragmentUrl.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (response) { return response.text(); })
+      .then(function (html) {
+        var dialog = ensurePickerDialog();
+        dialog.innerHTML = html; // server-rendered, escaped template output
+        updatePickerSummary();
+        return dialog;
+      });
+  }
+
+  function openPicker(url, opener) {
+    pickerSourceUrl = url;
+    pickerOpener = opener || null;
+    loadPicker(url)
+      .then(function (dialog) {
+        if (supportsDialog) {
+          openModal(dialog, pickerOpener);
+          var first = dialog.querySelector('input[type="checkbox"]');
+          if (first) {
+            first.focus();
+          }
+        } else {
+          window.location.href = url; // no <dialog>: use the picker page
+        }
+      })
+      .catch(function () { window.location.href = url; });
+  }
+
+  /** "Adds to / Removes from / Stays in" from the current checkboxes versus the opening state. */
+  function updatePickerSummary() {
+    var dialog = pickerDialog;
+    var summary = dialog && dialog.querySelector('[data-sw-picker-summary]');
+    if (!summary) {
+      return;
+    }
+    var adds = [];
+    var removes = [];
+    var keeps = [];
+    dialog.querySelectorAll('input[name="lists[]"]').forEach(function (box) {
+      var name = box.getAttribute('data-sw-list-name');
+      var was = box.getAttribute('data-sw-was') === '1';
+      if (box.checked && !was) {
+        adds.push(name);
+      } else if (!box.checked && was) {
+        removes.push(name);
+      } else if (box.checked) {
+        keeps.push(name);
+      }
+    });
+    var lines = [];
+    if (adds.length) {
+      lines.push(summary.getAttribute('data-sw-label-add').replace('%lists%', adds.join(', ')));
+    }
+    if (removes.length) {
+      lines.push(summary.getAttribute('data-sw-label-remove').replace('%lists%', removes.join(', ')));
+    }
+    if (keeps.length && (adds.length || removes.length)) {
+      lines.push(summary.getAttribute('data-sw-label-keep').replace('%lists%', keeps.join(', ')));
+    }
+    summary.textContent = lines.length ? lines.join(' · ') : summary.getAttribute('data-sw-label-none');
+  }
+
+  function pickerFeedback(messages) {
+    var box = pickerDialog && pickerDialog.querySelector('[data-sw-picker-feedback]');
+    if (box) {
+      box.textContent = messages.join(' ');
+      box.className = 'sw-picker__feedback alert alert-danger';
+    }
+  }
+
+  function postForm(form) {
+    var data = new FormData(form);
+    data.set('ajax', '1');
+    return fetch(form.getAttribute('action'), {
+      method: 'POST',
+      body: data,
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+    }).then(function (response) { return response.json(); });
+  }
+
+  function onPickerSubmit(event) {
+    var form = event.target;
+    if (form.matches('[data-sw-picker-form]')) {
+      event.preventDefault();
+      var save = form.querySelector('button[type="submit"]');
+      save.disabled = true;
+      postForm(form)
+        .then(function (json) {
+          if (json.success === true) {
+            setCount(json.count);
+            setSaved(json.id_product, json.id_product_attribute, json.saved === true);
+            notify(json.messages || [], true);
+            pickerDialog.close(); // only after the server confirmed
+          } else if (json.code === 'stale') {
+            // Show the current memberships; the visitor reviews and saves again.
+            return loadPicker(pickerSourceUrl).then(function () { pickerFeedback(json.messages || []); });
+          } else {
+            pickerFeedback(json.messages || []); // keep every checkbox as it was
+          }
+        })
+        .catch(function () { pickerFeedback([(window.summitWishlistI18n || {}).error || 'Error']); })
+        .finally(function () { save.disabled = false; });
+    } else if (form.matches('[data-sw-picker-create]')) {
+      event.preventDefault();
+      var input = form.querySelector('input[name="name"]');
+      var error = form.querySelector('[data-sw-picker-create-error]');
+      // Remember unsaved ticks so the reloaded picker (which now lists the new list) keeps them.
+      var ticks = {};
+      pickerDialog.querySelectorAll('input[name="lists[]"]').forEach(function (box) { ticks[box.value] = box.checked; });
+      postForm(form)
+        .then(function (json) {
+          if (json.success !== true) {
+            input.classList.add('is-invalid');
+            input.setAttribute('aria-invalid', 'true');
+            input.setAttribute('aria-describedby', error.id);
+            error.textContent = (json.messages || []).join(' ');
+            error.classList.add('d-block');
+            input.focus();
+            return null;
+          }
+          return loadPicker(pickerSourceUrl).then(function (dialog) {
+            dialog.querySelectorAll('input[name="lists[]"]').forEach(function (box) {
+              if (Object.prototype.hasOwnProperty.call(ticks, box.value)) {
+                box.checked = ticks[box.value];
+              }
+            });
+            updatePickerSummary();
+            var created = dialog.querySelector('input[name="lists[]"][value="' + json.id + '"]');
+            if (created) {
+              created.focus();
+            }
+          });
+        })
+        .catch(function () { pickerFeedback([(window.summitWishlistI18n || {}).error || 'Error']); });
+    }
+  }
 
   // Product cards: move the heart into the image area. Idempotent and scoped to module markup.
   function placeHearts(root) {
@@ -224,20 +422,24 @@
       if (opener && typeof opener.focus === 'function') {
         opener.focus();
       }
-      if (dialog.id === 'sw-post-cart') {
-        forgetJustAdded();
-      }
+      forgetJustAdded();
     });
   }
 
-  /** Drops swl_added from the URL so a reload or "back" doesn't ask again. */
+  /** Drops one-shot parameters (post-cart prompt, no-JS dialog openers) so a reload doesn't reopen them. */
   function forgetJustAdded() {
     if (!window.history || !window.history.replaceState) {
       return;
     }
     var url = new URL(window.location.href);
-    if (url.searchParams.has('swl_added')) {
-      url.searchParams.delete('swl_added');
+    var changed = false;
+    ['swl_added', 'dialog', 'target', 'move'].forEach(function (key) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key);
+        changed = true;
+      }
+    });
+    if (changed) {
       window.history.replaceState(null, '', url.toString());
     }
   }
@@ -269,12 +471,21 @@
     document.querySelectorAll('dialog[data-sw-autoshow]').forEach(function (dialog) {
       dialog.classList.remove('sw-dialog--inline');
       openModal(dialog, null);
-      var first = dialog.querySelector('.btn');
+      // Field with an error, or the safe default (Cancel on delete), else the first action.
+      var first = dialog.querySelector('[aria-invalid="true"], [autofocus], .btn');
       if (first) {
         first.focus();
       }
     });
   }
+
+  // Mobile list switcher: navigate on change; the "Show" button is the no-JS path.
+  document.addEventListener('change', function (event) {
+    var select = event.target.closest && event.target.closest('[data-sw-switcher]');
+    if (select && select.form) {
+      select.form.submit();
+    }
+  });
 
   function init() {
     placeHearts();

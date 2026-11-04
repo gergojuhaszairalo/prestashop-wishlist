@@ -76,33 +76,19 @@ class WishlistService
         return $this->repository->getItems($wishlistId);
     }
 
+    /**
+     * Saved entries in the owner's **default** list: the header badge (Stage 1 meaning, kept in Stage 2).
+     */
     public function countItems(WishlistOwner $owner): int
     {
-        return count($this->savedVariants($owner));
+        $wishlist = $this->getDefaultWishlist($owner);
+
+        return $wishlist ? $this->repository->countItems((int) $wishlist['id_wishlist']) : 0;
     }
 
     /**
-     * Moves a guest's list into the customer's default list once they are logged in.
-     *
-     * @return int items newly added to the customer's list
-     */
-    public function claimGuestList(WishlistOwner $guest, WishlistOwner $customer): int
-    {
-        if (!$guest->isGuest() || $customer->isGuest() || $guest->getShopId() !== $customer->getShopId()) {
-            return 0;
-        }
-        $this->savedCache = [];
-
-        return $this->repository->claimGuestList(
-            $customer->getShopId(),
-            $guest->getOwnerKey(),
-            $customer->getOwnerKey(),
-            (int) $customer->getCustomerId()
-        );
-    }
-
-    /**
-     * Whether this exact product/combination is in the owner's default list (drives the filled heart).
+     * Whether this exact product/combination is in **any** of the owner's lists (drives the filled heart).
+     * With one list this is the Stage 1 meaning.
      */
     public function isSaved(WishlistOwner $owner, int $productId, int $productAttributeId): bool
     {
@@ -119,14 +105,18 @@ class WishlistService
     {
         $key = $owner->getShopId() . '|' . $owner->getOwnerKey();
         if (!isset($this->savedCache[$key])) {
-            $wishlist = $this->getDefaultWishlist($owner);
-            $this->savedCache[$key] = [];
-            foreach ($wishlist ? $this->repository->getItems((int) $wishlist['id_wishlist']) : [] as $item) {
-                $this->savedCache[$key][$item['id_product'] . '-' . $item['id_product_attribute']] = true;
-            }
+            $this->savedCache[$key] = $this->repository->savedVariantKeys($owner->getShopId(), $owner->getOwnerKey());
         }
 
         return $this->savedCache[$key];
+    }
+
+    /**
+     * Call after mutations made outside this service (list manager), so hearts re-read.
+     */
+    public function forgetSavedState(): void
+    {
+        $this->savedCache = [];
     }
 
     /**
