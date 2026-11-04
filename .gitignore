@@ -2,3 +2,5 @@ node_modules/
 tests/e2e/results/
 tests/e2e/report/
 .env
+config.xml
+config_*.xml
