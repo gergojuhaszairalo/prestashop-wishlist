@@ -20,7 +20,7 @@ Source: "Task 2" tab (Stage 2, 14 scenarios, 19 acceptance criteria). It builds 
 
 Decision 1 was made on 4 Nov 2026. The rest are recommendations I'll follow unless told otherwise.
 
-1. **Destination picker: radios, as in Figma frame 04 (decided).** With 2+ lists, the heart or PDP button opens a dialog with **one radio per list** and Save. Save **adds** the variant to the chosen list (Scenarios 4 and 5). Lists that already hold the variant show a "Saved" badge. Choosing one of them answers "already in Birthday" and changes nothing (idempotent add). With 2+ lists the heart never removes; removal happens per list on the wishlist page (Scenario 8). With exactly one list the heart keeps the Stage 1 toggle (decision 3).
+1. **Destination picker: checkboxes (decided; this replaces an earlier choice of radios).** With 2+ lists, the heart or PDP button opens a dialog with **one checkbox per list**, checked when the variant is already in that list. Save applies the difference: newly checked lists get the variant, unchecked ones lose it. That covers Scenario 4 (tick Birthday), Scenario 5 (tick Christmas while Birthday stays ticked) and the remove-on-click rule in one control. This deviates from Figma frame 04, which shows radios. With exactly one list the heart keeps the Stage 1 toggle (decision 3).
 2. **Duplicate list names: allowed?** *Recommend rejecting* a name that matches another list of the same owner, ignoring case and surrounding whitespace ("Birthday" vs "birthday "). Task 2 only forbids empty names, but two lists called "Birthday" make the picker ambiguous.
 3. **With exactly one list, nothing changes from Stage 1.** The heart toggles directly, with no picker, so a single-list shopper never sees extra steps.
 4. **Default list.** It stays the target for single-list toggles, guest claim merges and new visitors. It can be renamed and deleted. Deleting it promotes the most recently updated remaining list. Deleting the last list leaves the empty state; the next save lazily creates "My wishlist" again.
@@ -48,13 +48,13 @@ Decision 1 was made on 4 Nov 2026. The rest are recommendations I'll follow unle
 ### PDP and product cards
 
 - **1 list:** the Stage 1 toggle.
-- **2+ lists:** the heart or PDP button opens the **picker** dialog, per Figma frame 04:
-  - 500px wide, 24px padding, 8px radius;
+- **2+ lists:** the heart or PDP button opens the **picker** dialog, with Figma frame 04's sizing (500px wide, 24px padding, 8px radius) but checkboxes:
   - product name + selected combination;
-  - **one radio per list**, with lists already holding the variant marked "Saved" and the first non-saved list preselected;
-  - a "New list" radio with a name field;
+  - **one checkbox per list**, checked when the variant is already in it;
+  - "New list" checkbox with a name field;
   - Cancel / Save.
-- **Opening, cancelling or Escape saves nothing.** Save posts `op=add` with an explicit `id_wishlist`, or `op=add_to_new` with a name. The server answers `added` / `already_present` and the new "saved in any list" state, so the heart fills.
+- **Opening, cancelling or Escape saves nothing.** Save posts `op=save_to_lists` with explicit `wishlist_ids[]` (the checked lists) and an optional new list name. The server adds to newly checked lists, removes from unchecked ones, and answers with the per-list state plus "saved in any list", so the heart fills or empties.
+- **Save with nothing checked** removes the variant from every list. The dialog says so on the Save button ("Remove from all lists") so it's never a surprise.
 - **No JS:** the heart form posts as today. When the owner has 2+ lists, the server redirects to a small **picker page** (`controller=picker&id_product=…&id_product_attribute=…`) that renders the same form, so it still works without JavaScript.
 - **Data for the picker:** a JSON endpoint (`controller=lists&op=for_variant`) returns the owner's lists with an `in_list` flag for the variant. It is loaded when the dialog opens, so cards don't embed every list.
 
@@ -71,16 +71,16 @@ Decision 1 was made on 4 Nov 2026. The rest are recommendations I'll follow unle
 **Service** (`WishlistService`), all access-checked
 - `getWishlists(owner)`, `createWishlist(owner, name)` (returns the list or a validation code), `renameWishlist(owner, id, name)`, `deleteWishlist(owner, id)`;
 - `moveItem(owner, fromId, itemId, toId)`;
-- `addToNewList(owner, name, productId, attrId, groups)`, i.e. create + add in one step from the picker;
+- `saveToLists(owner, productId, attrId, groups, listIds, newListName)`, i.e. the picker diff in one transaction (optional create + adds + removes);
 - `listsForVariant(owner, productId, attrId)`.
 
-The picker's Save reuses the existing idempotent `addItem(owner, wishlistId, …)`. `toggleItem` stays for single-list owners; heart state becomes "saved in any list".
+Adds reuse the existing idempotent `addItem(owner, wishlistId, …)`. `toggleItem` stays for single-list owners; heart state becomes "saved in any list".
 
 **`WishlistNameValidator`:** trim, collapse inner whitespace, 1–64 characters, `Validate::isGenericName`, unique per owner (case-insensitive). Codes: `name_required`, `name_too_long`, `name_invalid`, `name_taken`, `too_many_lists`.
 
 **Controllers**
 - `lists` (new, POST): `create`, `rename`, `delete`, `for_variant` (GET JSON).
-- `item`: adds `move`, `add_to_new`; existing ops gain the explicit `id_wishlist` instead of "default". A `toggle` from an owner with 2+ lists answers `needs_picker` (JS opens the dialog; no-JS redirects to the picker page).
+- `item`: adds `move`, `save_to_lists`; existing ops gain the explicit `id_wishlist` instead of "default". A `toggle` from an owner with 2+ lists answers `needs_picker` (JS opens the dialog; no-JS redirects to the picker page).
 - `cart`: takes `id_wishlist`.
 - `wishlist`: reads `?list=` (404 when not owned).
 - `picker` (new, GET): no-JS fallback.
@@ -100,7 +100,7 @@ All POSTs keep the stateless CSRF token and the server-side owner resolution. No
 1. **Repository + service + validator** for list CRUD and move; unit-style checks through direct requests. *(45 min)*
 2. **Wishlist page:** list navigation, `?list=`, create with validation, rename, delete with confirmation, per-list items/cart/empty. *Checkpoint: Scenarios 1–3, 6–8, 10, 14.* *(60 min)*
 3. **Move between lists.** *Checkpoint: Scenario 9.* *(20 min)*
-4. **Picker:** `for_variant` endpoint, radio dialog, `add` / `add_to_new`, no-JS picker page, heart "saved in any list". *Checkpoint: Scenarios 4, 5.* *(60 min)*
+4. **Picker:** `for_variant` endpoint, checkbox dialog, `save_to_lists`, no-JS picker page, heart "saved in any list". *Checkpoint: Scenarios 4, 5.* *(60 min)*
 5. **Guest/customer:** multi-list claim, persistence checks. *Checkpoint: Scenarios 11, 12, 13.* *(30 min)*
 6. **Upgrade rehearsal on a shop with 1.0.1 data,** README/changelog, Playwright. *(30 min)*
 
@@ -111,10 +111,11 @@ All POSTs keep the stateless CSRF token and the server-side owner resolution. No
 | 1 Create | create "Birthday" → in navigation, selected, empty |
 | 2 View all | three lists → three tabs, each opens |
 | 3 Isolation | Birthday shows its two products, not Christmas-only ones |
-| 4 Add to selected | PDP → picker → choose Birthday radio → Save → in Birthday, not in My Favorites |
-| 5 Same product, two lists | in Birthday → picker shows Birthday "Saved" → choose Christmas → in both; saving to Birthday again keeps one entry |
-| Picker cancel | open → Escape / Cancel → nothing saved |
-| Picker new list | choose "New list", type "Gifts" → list created with the product |
+| 4 Add to selected | PDP → picker → tick Birthday → Save → in Birthday, not in My Favorites |
+| 5 Same product, two lists | in Birthday → picker shows Birthday ticked → also tick Christmas → in both, one entry each |
+| Picker removes | untick Birthday → Save → gone from Birthday, still in Christmas |
+| Picker cancel | open → change ticks → Escape / Cancel → nothing saved |
+| Picker new list | tick "New list", type "Gifts" → list created with the product |
 | 6 Rename | "Birthday Ideas", same two products, old name gone everywhere |
 | 7 Delete | confirm → list gone, other lists unchanged, product page still works |
 | 8 Remove from one | removed from Birthday, still in Christmas |
@@ -130,5 +131,6 @@ All POSTs keep the stateless CSRF token and the server-side owner resolution. No
 ## 8. Risks
 
 - **The picker is the biggest UI piece.** The no-JS page fallback means it can ship without the dialog if time runs short.
-- **Heart behaviour changes with the list count.** With one list it toggles; with 2+ lists it opens the picker and never removes. This is intentional (radio picker) but worth showing explicitly in the demo, since an organiser may click a filled heart and expect removal.
+- **Heart behaviour changes with the list count.** With one list it toggles directly; with 2+ lists it opens the picker, where unticking removes. Show both in the demo.
+- **Deviation from Figma frame 04** (radios → checkboxes): mention it to whoever reviews the design.
 - **Container restart** restores the DB dump and wipes the module (unchanged risk).
