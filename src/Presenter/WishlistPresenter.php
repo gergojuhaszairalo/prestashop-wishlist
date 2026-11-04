@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Summit\Wishlist\Presenter;
 
 use Context;
@@ -65,6 +67,7 @@ class WishlistPresenter
                     'image' => null,
                     'price' => null,
                     'status' => 'unavailable',
+                    'availability_label' => '',
                 ];
                 continue;
             }
@@ -77,6 +80,8 @@ class WishlistPresenter
                 'image' => $this->imageUrl($product['cover'] ?? null),
                 'price' => !empty($product['show_price']) ? $product['price'] : null,
                 'status' => $this->service->availability($productId, $attributeId),
+                // Core's localized stock message ("In stock", backorder text...) for purchasable rows.
+                'availability_label' => (string) ($product['availability_message'] ?? ''),
             ];
         }
 

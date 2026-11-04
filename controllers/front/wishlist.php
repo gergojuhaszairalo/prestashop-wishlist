@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * The wishlist page, available to guests and customers.
  *
@@ -17,8 +19,16 @@ class SummitwishlistWishlistModuleFrontController extends ModuleFrontController
         $wishlist = $service->getDefaultWishlist($owner);
         $items = $wishlist ? $service->getItems($owner, (int) $wishlist['id_wishlist']) : [];
 
+        $presented = $services->presenter()->present($items);
         $this->context->smarty->assign([
-            'swl_items' => $services->presenter()->present($items),
+            'swl_items' => $presented,
+            'swl_available_count' => count(array_filter($presented, static function (array $item) {
+                return $item['status'] === 'ok';
+            })),
+            'swl_is_guest' => $owner->isGuest(),
+            'swl_login_url' => $this->context->link->getPageLink('authentication', null, null, [
+                'back' => $this->module->getWishlistUrl(),
+            ]),
             'swl_token' => $services->csrf()->getToken($owner),
             'swl_cart_url' => $this->context->link->getModuleLink($this->module->name, 'cart'),
             'swl_item_url' => $this->context->link->getModuleLink($this->module->name, 'item'),

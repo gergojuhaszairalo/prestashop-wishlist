@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Summit\Wishlist\Controller;
 
 use Tools;
@@ -28,6 +30,9 @@ trait RespondsToShopper
     protected function respond(bool $success, array $messages, array $data = []): void
     {
         if ($this->wantsJson()) {
+            // JSON bypasses smartyOutputContent(), where core normally writes the cookie,
+            // and echoing first would block the destructor's write. Write it exactly once here.
+            $this->context->cookie->write();
             header('Content-Type: application/json');
             $this->ajaxRender(json_encode(['success' => $success, 'messages' => $messages] + $data));
             exit;

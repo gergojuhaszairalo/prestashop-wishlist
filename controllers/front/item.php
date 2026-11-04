@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Summit\Wishlist\Controller\RespondsToShopper;
 use Summit\Wishlist\Security\CsrfTokenManager;
 
@@ -25,21 +27,32 @@ class SummitwishlistItemModuleFrontController extends ModuleFrontController
         }
 
         $service = $services->wishlistService();
-        switch (Tools::getValue('op')) {
-            case 'add':
+        $op = Tools::getValue('op');
+        switch ($op) {
+            case 'add': // idempotent: re-adding reports "already in your wishlist"
+            case 'toggle': // hearts and the PDP button: removes when already saved
                 $wishlist = $service->getDefaultWishlist($owner, true);
                 $groups = Tools::getValue('group');
-                $result = $service->addItem(
+                $args = [
                     $owner,
                     (int) $wishlist['id_wishlist'],
                     (int) Tools::getValue('id_product'),
                     (int) Tools::getValue('swl_id_product_attribute'),
-                    is_array($groups) ? array_values($groups) : []
-                );
+                    is_array($groups) ? array_values($groups) : [],
+                ];
+                $result = $op === 'toggle' ? $service->toggleItem(...$args) : $service->addItem(...$args);
+                $saved = $result['saved'] ?? in_array($result['code'], ['added', 'already_present'], true);
                 $this->respond(
-                    in_array($result['code'], ['added', 'already_present'], true),
+                    in_array($result['code'], ['added', 'already_present', 'removed'], true),
                     [$this->module->messageFor($result['code'], $result['product_name'])],
-                    ['code' => $result['code'], 'count' => $service->countItems($owner)]
+                    [
+                        'code' => $result['code'],
+                        'saved' => $saved,
+                        'count' => $service->countItems($owner),
+                        // The variant actually affected (resolved server-side), so the UI can update every matching trigger.
+                        'id_product' => $result['id_product'] ?? null,
+                        'id_product_attribute' => $result['id_product_attribute'] ?? null,
+                    ]
                 );
                 break;
 

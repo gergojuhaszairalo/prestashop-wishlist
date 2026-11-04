@@ -1,45 +1,145 @@
-.summitwishlist-add--pdp { margin-top: .75rem; }
-.summitwishlist-add--miniature { margin: .25rem 0 0; }
-.summitwishlist-add .material-icons { font-size: 1.1em; vertical-align: -.2em; }
+/*
+ * Summit Wishlist. Scoped to sw-* classes; inherits Hummingbird's font, colors and
+ * native controls (btn, form-check, badge) through the theme's --bs-* variables so a
+ * merchant's theme customisation carries over. Logical properties keep RTL possible.
+ */
 
-.summitwishlist-list { margin: 0 0 1.5rem; padding: 0; }
-.summitwishlist-item {
-  display: grid;
-  grid-template-columns: auto 125px 1fr auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem 0;
-  border-bottom: 1px solid rgba(0, 0, 0, .1);
-}
-.summitwishlist-item__image img { max-width: 100%; height: auto; display: block; }
-.summitwishlist-item__name { font-weight: 600; }
-.summitwishlist-item__combination { color: #6c757d; font-size: .9em; }
-.summitwishlist-item__price { margin-top: .25rem; }
-.summitwishlist-item__actions { display: flex; flex-direction: column; gap: .5rem; align-items: flex-end; }
-.summitwishlist-item--unavailable .summitwishlist-item__image,
-.summitwishlist-item--unavailable .summitwishlist-item__name { opacity: .55; }
-.summitwishlist-page__actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-
-@media (max-width: 575px) {
-  .summitwishlist-item { grid-template-columns: auto 80px 1fr; }
-  .summitwishlist-item__actions { grid-column: 2 / -1; flex-direction: row; align-items: center; }
+.sw-wishlist {
+  --sw-radius: var(--bs-border-radius, .5rem);
+  --sw-radius-sm: var(--bs-border-radius-sm, .25rem);
+  --sw-border: var(--bs-border-width, 1px) solid var(--bs-border-color, #dee2e6);
+  --sw-target: 2.75rem; /* 44px touch target */
+  color: var(--bs-body-color, #212529);
+  font: inherit;
 }
 
-.summitwishlist-toasts {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 1080;
+.sw-action { min-block-size: var(--sw-target); display: inline-flex; align-items: center; justify-content: center; gap: .5rem; }
+.sw-icon-action { min-inline-size: var(--sw-target); min-block-size: var(--sw-target); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.sw-action .material-icons, .sw-icon-action .material-icons { font-size: 1.25rem; }
+
+.sw-wishlist__count { margin: 0 0 1.5rem; color: var(--bs-secondary-color, rgba(33, 37, 41, .75)); font-size: .875rem; line-height: 1.5; }
+
+/* Guest notice */
+.sw-notice {
   display: flex;
-  flex-direction: column;
-  gap: .5rem;
+  gap: .75rem;
+  align-items: flex-start;
+  margin-block-end: 1.5rem;
+  padding: 1rem;
+  border-radius: var(--sw-radius);
+  background: var(--bs-primary-bg-subtle, #cee1fd);
+  color: var(--bs-body-color, #212529);
 }
-.summitwishlist-toast {
+.sw-notice__icon { color: var(--bs-primary, #0b69f6); }
+.sw-notice__text { margin: 0; }
+.sw-notice__text a { font-weight: 600; }
+
+/* Selection toolbar */
+.sw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  margin-block-end: 1rem;
   padding: .75rem 1rem;
-  border-radius: .375rem;
-  color: #fff;
-  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .15);
-  max-width: 22rem;
+  border: var(--sw-border);
+  border-radius: var(--sw-radius);
+  background: var(--bs-tertiary-bg, #f8f9fa);
 }
-.summitwishlist-toast.is-success { background: #198754; }
-.summitwishlist-toast.is-error { background: #dc3545; }
+.sw-toolbar__select { margin: 0; min-block-size: 1.5rem; }
+.sw-toolbar__selected { font-size: .875rem; font-weight: 600; }
+
+/* Rows */
+.sw-list { display: flex; flex-direction: column; gap: 1rem; margin: 0 0 1.5rem; padding: 0; }
+.sw-item {
+  display: grid;
+  grid-template-columns: var(--sw-target) 7rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem;
+  border: var(--sw-border);
+  border-radius: var(--sw-radius);
+  background: var(--bs-body-bg, #fff);
+}
+.sw-item__select { display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; min-block-size: var(--sw-target); }
+.sw-item__select .form-check-input { margin: 0; float: none; }
+.sw-item__media { line-height: 0; }
+.sw-item__image { width: 7rem; height: 7rem; object-fit: contain; border-radius: var(--sw-radius-sm); background: var(--bs-tertiary-bg, #f8f9fa); }
+.sw-item__details { min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
+.sw-item__details p { margin: 0; }
+.sw-item__name { font-weight: 600; overflow-wrap: anywhere; color: var(--bs-body-color, #212529); text-decoration: none; }
+a.sw-item__name:hover, a.sw-item__name:focus-visible { color: var(--bs-primary, #0b69f6); text-decoration: underline; }
+.sw-item__variant { font-size: .875rem; line-height: 1.5; color: var(--bs-secondary-color, rgba(33, 37, 41, .75)); overflow-wrap: anywhere; }
+.sw-item__price { font-weight: 600; }
+.sw-item__availability { font-size: .875rem; }
+.sw-item__availability .material-icons { font-size: 1rem; vertical-align: -.2em; }
+.sw-item__actions { display: flex; align-items: center; gap: 1rem; }
+
+/* Unavailable rows stay readable: only the image is muted, the reason is explicit. */
+.sw-item--unavailable .sw-item__image { opacity: .5; }
+
+/* Bulk actions sit after the list */
+.sw-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+
+/* Empty state */
+.sw-empty { max-inline-size: 32rem; margin: 3rem auto; text-align: center; }
+.sw-empty__icon { font-size: 3rem; color: var(--bs-primary, #0b69f6); }
+.sw-empty__title { margin: 1rem 0 .5rem; font-size: 1.5rem; font-weight: 600; line-height: 1.2; }
+.sw-empty__text { margin: 0 0 1.5rem; color: var(--bs-secondary-color, rgba(33, 37, 41, .75)); }
+
+/* Product card heart: native look (white, body icon, 4px radius, 6px padding, 8px offset), saved = filled primary */
+.sw-card-heart { margin: .5rem 0 0; }
+.sw-heart {
+  min-inline-size: var(--sw-target, 2.75rem);
+  min-block-size: var(--sw-target, 2.75rem);
+  padding: .375rem;
+  border: 0;
+  border-radius: var(--bs-border-radius-sm, .25rem);
+  background: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color, #212529);
+  line-height: 1;
+}
+.sw-heart:hover, .sw-heart:focus-visible { color: var(--bs-primary, #0b69f6); }
+.sw-heart.is-saved, .sw-pdp__trigger.is-saved .sw-heart-icon { color: var(--bs-primary, #0b69f6); }
+.sw-card-heart-host { position: relative; }
+.sw-card-heart-host .sw-card-heart { position: absolute; inset-block-start: .5rem; inset-inline-end: .5rem; z-index: 2; margin: 0; }
+.sw-card-heart-host .sw-heart { box-shadow: var(--bs-box-shadow-sm, 0 .125rem .25rem rgba(0, 0, 0, .075)); }
+
+/* PDP: a flex sibling of the native quantity input and "Add to cart" (both 38px, centered),
+   so it takes the native button height and no extra spacing; the row's own gap separates them. */
+.sw-pdp { margin: 0; }
+.sw-pdp__trigger { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; white-space: nowrap; }
+.sw-pdp__trigger .sw-heart-icon { font-size: 1.25rem; line-height: 1; }
+
+/* Header entries reuse the theme's header-block styles. On desktop the entry renders after
+   the cart, which the theme styles as the last item (no end padding). Restore the native
+   12px + 12px rhythm between them, and take over the flush end edge when we are last. */
+.sw-nav { display: flex; }
+.sw-nav--desktop { margin-inline-start: .75rem; }
+.sw-nav--desktop:last-child .header-block__action-btn { padding-inline-end: 0; }
+
+/* Fallback live messages when the theme toast helper isn't available */
+.sw-live { position: fixed; inset-inline-end: 1rem; inset-block-end: 1rem; z-index: 1080; display: flex; flex-direction: column; gap: .5rem; }
+.sw-live__message { padding: .75rem 1rem; border-radius: var(--bs-border-radius, .5rem); max-inline-size: 22rem; box-shadow: var(--bs-box-shadow, 0 .5rem 1rem rgba(0, 0, 0, .15)); }
+.sw-live__message.is-success { background: var(--bs-success-bg-subtle, #d1e6dc); color: var(--bs-success-text-emphasis, #0a3420); }
+.sw-live__message.is-error { background: var(--bs-danger-bg-subtle, #ffdadd); color: var(--bs-danger-text-emphasis, #661c23); }
+
+@media (max-width: 767.98px) {
+  .sw-item {
+    grid-template-columns: 5.5rem minmax(0, 1fr) var(--sw-target);
+    align-items: start;
+    gap: .5rem 1rem;
+  }
+  .sw-item__media { grid-column: 1; grid-row: 1; }
+  .sw-item__image { width: 5.5rem; height: 5.5rem; }
+  .sw-item__details { grid-column: 2; grid-row: 1; }
+  .sw-item__select { grid-column: 3; grid-row: 1; }
+  .sw-item__actions { grid-column: 1 / -1; }
+  .sw-item__actions .sw-add { flex: 1; }
+  .sw-bulk .sw-action { flex: 1 1 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sw-wishlist *, .sw-heart { transition: none !important; }
+}

@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Summit\Wishlist\Service;
 
 use Context;
 use Db;
+use PrestaShopLogger;
 use Summit\Wishlist\Cart\PrestaShopCartGateway;
 use Summit\Wishlist\Cart\PurchasePolicy;
 use Summit\Wishlist\Catalog\PrestaShopProductCatalog;
@@ -25,6 +28,8 @@ class ServiceFactory
     private $instances = [];
     /** @var WishlistOwner|null */
     private $owner;
+    /** @var int */
+    private $claimed = 0;
 
     public function __construct(Context $context)
     {
@@ -34,10 +39,39 @@ class ServiceFactory
     public function owner(): WishlistOwner
     {
         if ($this->owner === null) {
-            $this->owner = (new OwnerResolver($this->context))->resolve();
+            $resolver = new OwnerResolver($this->context);
+            $this->owner = $resolver->resolve();
+            $this->claimPendingGuestList($resolver, $this->owner);
         }
 
         return $this->owner;
+    }
+
+    /**
+     * Items moved from the guest list on this request (0 when nothing was claimed).
+     */
+    public function claimedCount(): int
+    {
+        return $this->claimed;
+    }
+
+    /**
+     * Lazy claim: the first request after any login path moves the guest list into the
+     * account. Idempotent: the guest token is forgotten afterwards; on failure it is kept
+     * so the next request retries, and the page still renders.
+     */
+    private function claimPendingGuestList(OwnerResolver $resolver, WishlistOwner $owner): void
+    {
+        $guest = $resolver->pendingGuestOwner();
+        if ($guest === null) {
+            return;
+        }
+        try {
+            $this->claimed = $this->wishlistService()->claimGuestList($guest, $owner);
+            $resolver->forgetGuest();
+        } catch (\Throwable $e) {
+            PrestaShopLogger::addLog('summitwishlist: guest list claim failed: ' . $e->getMessage(), 2, null, 'Customer', (int) $owner->getCustomerId());
+        }
     }
 
     public function repository(): DbWishlistRepository
@@ -52,7 +86,7 @@ class ServiceFactory
 
     public function csrf(): CsrfTokenManager
     {
-        return $this->instances['csrf'] ??= new CsrfTokenManager($this->context->cookie);
+        return $this->instances['csrf'] ??= new CsrfTokenManager($this->context->cookie, (string) _COOKIE_KEY_);
     }
 
     public function wishlistService(): WishlistService

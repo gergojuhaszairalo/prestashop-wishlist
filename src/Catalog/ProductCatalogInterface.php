@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Summit\Wishlist\Catalog;
 
 use Product;

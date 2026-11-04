@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Summit\Wishlist\Controller\RespondsToShopper;
 use Summit\Wishlist\Security\CsrfTokenManager;
 

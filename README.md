@@ -20,10 +20,23 @@ Replace the module files with the newer version, then click **Upgrade** in the M
 ## Behaviour and decisions
 
 - **Entries are purchasable variants:** product + combination. Product pages save the selected combination; product cards save the default one. The same variant is never saved twice.
-- **Guests** are identified by a random token in the PrestaShop cookie. Only its SHA-256 hash is stored. **Customers** are identified by their account. The two lists are kept separate: logging in shows the account list, and logging out returns to the browser's guest list.
+- **Guests** are identified by a random token in the PrestaShop cookie. Only its SHA-256 hash is stored. **Customers** are identified by their account.
+- **Logging in keeps the guest's items (1.0.1).** On the first request after any login path (login form, registration, password reset, cart recovery, social login), the guest list moves into the account's default list.
+  - If the account has no list yet, the guest list simply becomes the account list.
+  - Otherwise the two are merged; duplicates are dropped.
+  - The guest list and token are then deleted, so logging out later starts empty.
+  - A notice says how many items were added.
+  - Guest-checkout customers keep their cookie list until they create a real account.
 - **CSRF:** every POST carries a per-visitor token bound to the current guest or customer. It is not `Tools::getToken()`, which is identical for all guests.
 - **Add to cart** reproduces the core cart controller's checks before calling `Cart::updateQty()`: shop and active/orderable status, customer-group access, combination validity, required customisation, minimal quantity, and stock/backorder rules. Results are reported per item. Adding to the cart never removes items from the wishlist or touches other cart lines.
 - **Unavailable items** (disabled, out of stock without backorders, deleted, restricted) stay visible with a reason and can't be added. Deleted products show the name saved when they were added.
+
+## Changelog
+
+- **1.0.1:** storefront redesign per the design proposal (`docs/design.md`); mobile header entry (`displayTop`, registered by `upgrade/upgrade-1.0.1.php`); guest list claimed into the account on login. No schema change.
+- **1.0.0:** Stage 1.
+
+After upgrading on a shop with CCC (combine/compress/cache) or template caching on, clear the cache (*Advanced Parameters → Performance → Clear cache*) so the new JS, CSS and templates are served.
 
 ## Compatibility
 

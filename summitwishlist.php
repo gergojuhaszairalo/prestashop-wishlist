@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * Summit Wishlist: guest and customer wishlists for PrestaShop 9.
  */
@@ -31,7 +34,7 @@ class Summitwishlist extends Module
     {
         $this->name = 'summitwishlist';
         $this->tab = 'front_office_features';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'PS Summit Hackathon team';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = ['min' => '9.0.0', 'max' => _PS_VERSION_];
@@ -69,6 +72,7 @@ class Summitwishlist extends Module
             'displayProductActions',
             'displayProductListReviews',
             'displayNav2',
+            'displayTop',
             'displayCustomerAccount',
             'actionFrontControllerSetMedia',
             'actionObjectCustomerDeleteAfter',
@@ -99,6 +103,16 @@ class Summitwishlist extends Module
 
     public function hookActionFrontControllerSetMedia(): void
     {
+        // Runs before initContent and before any output, which matters twice:
+        // - the guest-list claim happens early enough for its notice to show on this page;
+        // - the guest and CSRF tokens exist before core writes the cookie (once, at the start
+        //   of smartyOutputContent). Tokens first created while hooks render would be lost.
+        $services = $this->getServices();
+        $services->csrf()->getToken($services->owner());
+        if ($services->claimedCount() > 0) {
+            $this->context->controller->success[] = $this->messageFor('claimed', '', $services->claimedCount());
+        }
+
         $this->context->controller->registerStylesheet(
             'summitwishlist-css',
             'modules/' . $this->name . '/views/css/wishlist.css',
@@ -109,6 +123,9 @@ class Summitwishlist extends Module
             'modules/' . $this->name . '/views/js/wishlist.js',
             ['position' => 'bottom', 'priority' => 200]
         );
+        Media::addJsDef(['summitWishlistI18n' => [
+            'error' => $this->messageFor('failed'),
+        ]]);
     }
 
     public function hookDisplayProductActions(array $params): string
@@ -123,17 +140,23 @@ class Summitwishlist extends Module
 
     public function hookDisplayNav2(): string
     {
-        $this->context->smarty->assign([
-            'swl_url' => $this->getWishlistUrl(),
-            'swl_count' => $this->getServices()->wishlistService()->countItems($this->getServices()->owner()),
-        ]);
+        return $this->renderNav('nav-desktop');
+    }
 
-        return $this->fetch('module:summitwishlist/views/templates/hook/nav.tpl');
+    /**
+     * displayNav2 is hidden below 768px in Hummingbird, so small screens get their own entry here.
+     */
+    public function hookDisplayTop(): string
+    {
+        return $this->renderNav('nav-mobile');
     }
 
     public function hookDisplayCustomerAccount(): string
     {
-        $this->context->smarty->assign(['swl_url' => $this->getWishlistUrl()]);
+        $this->context->smarty->assign([
+            'swl_url' => $this->getWishlistUrl(),
+            'swl_active' => $this->context->controller instanceof SummitwishlistWishlistModuleFrontController,
+        ]);
 
         return $this->fetch('module:summitwishlist/views/templates/hook/account-link.tpl');
     }
@@ -184,6 +207,10 @@ class Summitwishlist extends Module
                 return $this->trans('"%product%" must be bought in a larger quantity.', $params, $domain);
             case 'max_quantity':
                 return $this->trans('You already have the maximum available quantity of "%product%" in your cart.', $params, $domain);
+            case 'claimed':
+                return $quantity === 1
+                    ? $this->trans('1 item from your visit was added to your wishlist.', [], $domain)
+                    : $this->trans('%quantity% items from your visit were added to your wishlist.', $params, $domain);
             case 'nothing_selected':
                 return $this->trans('Select at least one product first.', [], $domain);
             case 'invalid_token':
@@ -195,6 +222,16 @@ class Summitwishlist extends Module
         }
     }
 
+    private function renderNav(string $template): string
+    {
+        $this->context->smarty->assign([
+            'swl_url' => $this->getWishlistUrl(),
+            'swl_count' => $this->getServices()->wishlistService()->countItems($this->getServices()->owner()),
+        ]);
+
+        return $this->fetch('module:summitwishlist/views/templates/hook/' . $template . '.tpl');
+    }
+
     /**
      * @param array|\ArrayAccess|null $product
      */
@@ -204,15 +241,18 @@ class Summitwishlist extends Module
             return '';
         }
         $services = $this->getServices();
+        $productId = (int) $product['id_product'];
+        $attributeId = (int) ($product['id_product_attribute'] ?? 0);
 
         $this->context->smarty->assign([
-            'swl_context' => $context,
-            'swl_id_product' => (int) $product['id_product'],
-            'swl_id_product_attribute' => (int) ($product['id_product_attribute'] ?? 0),
+            'swl_id_product' => $productId,
+            'swl_id_product_attribute' => $attributeId,
+            'swl_product_name' => (string) ($product['name'] ?? ''),
+            'swl_saved' => $services->wishlistService()->isSaved($services->owner(), $productId, $attributeId),
             'swl_action_url' => $this->context->link->getModuleLink($this->name, 'item'),
             'swl_token' => $services->csrf()->getToken($services->owner()),
         ]);
 
-        return $this->fetch('module:summitwishlist/views/templates/hook/button.tpl');
+        return $this->fetch('module:summitwishlist/views/templates/hook/button-' . ($context === 'pdp' ? 'pdp' : 'card') . '.tpl');
     }
 }

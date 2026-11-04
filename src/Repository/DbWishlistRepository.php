@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Summit\Wishlist\Repository;
 
 use Db;
@@ -99,6 +101,19 @@ class DbWishlistRepository implements WishlistRepositoryInterface
         );
     }
 
+    public function findItemByVariant(int $wishlistId, int $productId, int $productAttributeId): ?array
+    {
+        $row = $this->db->getRow(
+            'SELECT * FROM `' . _DB_PREFIX_ . self::ITEMS . '`
+            WHERE `id_wishlist` = ' . $wishlistId . '
+              AND `id_product` = ' . $productId . '
+              AND `id_product_attribute` = ' . $productAttributeId,
+            false
+        );
+
+        return $row ?: null;
+    }
+
     public function addItem(int $wishlistId, int $productId, int $productAttributeId, string $fallbackName): bool
     {
         $this->db->insert(self::ITEMS, [
@@ -148,6 +163,63 @@ class DbWishlistRepository implements WishlistRepositoryInterface
             WHERE w.`id_customer` = ' . $customerId
         );
         $this->db->delete(self::LISTS, '`id_customer` = ' . $customerId);
+    }
+
+    public function claimGuestList(int $shopId, string $guestKey, string $customerKey, int $customerId): int
+    {
+        $lists = _DB_PREFIX_ . self::LISTS;
+        $items = _DB_PREFIX_ . self::ITEMS;
+
+        $this->db->execute('START TRANSACTION');
+        try {
+            // executeS, not getRow: getRow appends LIMIT 1 after FOR UPDATE, which is invalid SQL.
+            $rows = $this->db->executeS(
+                'SELECT * FROM `' . $lists . '` WHERE `id_shop` = ' . $shopId . "
+                  AND `owner_key` = '" . pSQL($guestKey) . "' AND `default_marker` = 1 LIMIT 1 FOR UPDATE",
+                true,
+                false
+            );
+            $guest = $rows[0] ?? null;
+            if (!$guest) {
+                $this->db->execute('COMMIT');
+
+                return 0;
+            }
+            $guestId = (int) $guest['id_wishlist'];
+            $customerList = $this->findDefault($shopId, $customerKey);
+
+            if ($customerList === null) {
+                // Same as the core cart: the visitor's basket simply becomes the account's.
+                $this->db->update(self::LISTS, [
+                    'owner_key' => pSQL($customerKey),
+                    'id_customer' => $customerId,
+                    'date_upd' => date('Y-m-d H:i:s'),
+                ], '`id_wishlist` = ' . $guestId);
+                $moved = $this->countItems($guestId);
+            } else {
+                // Unlike the cart, never drop the account's existing list: merge instead.
+                $targetId = (int) $customerList['id_wishlist'];
+                $this->db->execute(
+                    'INSERT IGNORE INTO `' . $items . '`
+                        (`id_wishlist`, `id_product`, `id_product_attribute`, `fallback_name`, `date_add`)
+                    SELECT ' . $targetId . ', `id_product`, `id_product_attribute`, `fallback_name`, `date_add`
+                    FROM `' . $items . '` WHERE `id_wishlist` = ' . $guestId
+                );
+                $moved = (int) $this->db->Affected_Rows();
+                $this->db->delete(self::ITEMS, '`id_wishlist` = ' . $guestId);
+                $this->db->delete(self::LISTS, '`id_wishlist` = ' . $guestId);
+                if ($moved > 0) {
+                    $this->touch($targetId);
+                }
+            }
+
+            $this->db->execute('COMMIT');
+
+            return $moved;
+        } catch (\Throwable $e) {
+            $this->db->execute('ROLLBACK');
+            throw $e;
+        }
     }
 
     private function touch(int $wishlistId): void
