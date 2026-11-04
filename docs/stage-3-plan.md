@@ -1,8 +1,27 @@
 # Stage 3: admin wishlist overview (implementation plan)
 
-Status: **draft for review; design pending** (the "Task 3: Admin design et captures" tab is still empty). Source: "Task 3" tab (10 scenarios, 16 acceptance criteria). Baseline: module **1.1.0** on `main` (`af871db`). Target release: **1.2.0**, as an in-place upgrade.
+Status: **draft for review, aligned with the "Task 3: Admin design and screenshots" tab**. Sources: "Task 3" tab (10 scenarios, 16 acceptance criteria) and the design tab, which overrides this plan where they differ. Baseline: module **1.1.0** on `main` (`af871db`, pushed to `gergojuhaszairalo/prestashop-wishlist`; the design tab's note about a 1.0.0 fork refers to the earlier `MCPAppsBuilders` fork). Target release: **1.2.0**, as an in-place upgrade.
 
 Stage 3 is **read-only visibility for employees**: a back-office listing of every wishlist (name, owner, product count, search by customer) and a detail page per wishlist. No create, edit, delete or move from the back office.
+
+## 0. Module structure: PrestaShop example-modules (1.2.0)
+
+1.2.0 also restructures the whole module after [PrestaShop/example-modules](https://github.com/PrestaShop/example-modules), without changing storefront behaviour or data:
+
+| Convention | Example module | In 1.2.0 |
+|---|---|---|
+| Composer PSR-4 autoload, `vendor/autoload.php` required from the module file | demodoctrine, demo_grid | `composer.json` (`Summit\Wishlist\` → `src/`, `prepend-autoloader: false`). The old hand-written autoloader stays only as a fallback for a copy without `vendor/` |
+| Services in the container: `config/common.yml`, imported by `config/front/services.yml` and `config/services.yml`; fetched from the container | demodoctrine | All storefront services are defined in `config/common.yml`. `ServiceFactory` now takes them from the container and wires them by hand only when the container doesn't know them yet (install, or a stale cache right after the file swap), like demodoctrine's `getInstaller()` |
+| Data access through the injected DBAL connection and `%database_prefix%` | demodoctrine, demo_grid | `DbWishlistRepository`, `Installer` and `WishlistPresenter` use `doctrine.dbal.default_connection` with bound parameters instead of `Db::getInstance()`. Same SQL, same locking (GET_LOCK + transaction on one connection), and the same stored values (legacy `pSQL()` tag stripping is kept) |
+| `PrestaShopAdminController`, `#[AdminSecurity]`, `config/routes.yml` with `_legacy_controller`/`_legacy_link` | demo_grid, democontrollertabs | Stage 3 admin controller |
+| Grid = definition factory + query builder + `Filters` + Doctrine data factory + `GridFactory`, grid JS extensions | demo_grid | Stage 3 grid, plus a small data decorator that labels guests |
+| `$tabs` with `route_name`; a manual Tab for upgrades | democontrollertabs | `$tabs` for installs, `upgrade-1.2.0.php` for upgrades |
+| `ps_versions_compliancy` max `9.99.99`, `getContent()` redirecting to the admin page, `config.xml` | all | done |
+
+**Deliberate deviations:**
+- **No Doctrine ORM entities** (demodoctrine has them). The repository relies on `INSERT IGNORE`, named locks and owner-scoped transactions that ORM would only obscure, and entities would add nothing for these two tables.
+- **`vendor/` is committed** (the examples ignore it and expect `composer install`). The strict upgrade rule is "replace the files, click Upgrade". The Symfony kernel needs `vendor/autoload.php` to compile the admin services, so a copy without it would break the back office.
+- **Front controllers stay `ModuleFrontController` with `moduleRoutes`**, as in demomoduleroutes.
 
 ## 1. What the earlier stages already give us
 
@@ -22,38 +41,47 @@ Stage 3 is **read-only visibility for employees**: a back-office listing of ever
 1. **Native PrestaShop grid** (Task 3 suggests it): `AbstractGridDefinitionFactory` + `AbstractDoctrineQueryBuilder` + `DoctrineGridDataFactory` + `GridFactory`. Pagination, sorting, filters and "reset" come from core, rendered with the core grid Twig templates. All classes exist in 9.2.0 (checked).
 2. **A modern Symfony admin controller** (`PrestaShopAdminController`, `#[AdminSecurity]` attributes, Twig), the same pattern as the core `ps_linklist` module shipped in this shop.
 3. **Menu placement:** *Customers → Wishlists* (`parent_class_name: AdminParentCustomer`), tab class `AdminSummitWishlist`, icon `favorite_border`. Permissions come from the standard tab roles (`ROLE_MOD_TAB_ADMINSUMMITWISHLIST_READ`…), granted to SuperAdmin on install and editable per employee profile.
-4. **Read-only by construction:** only **GET** routes are registered. The grid has no bulk actions, no row delete or edit, and no position handling; the only row action is **View**. The detail page has no forms. Even an employee with update or delete rights has no endpoint to call.
-5. **Grid columns:**
-   - ID;
+4. **Read-only by construction:** listing and detail are **GET**. The one POST is the core grid search (demo_grid's `searchAction`), which only stores the employee's filters and redirects. The grid has no bulk actions, no row delete or edit, and no position handling; the only row action is **View**. The detail page has no forms. Even an employee with update or delete rights has no endpoint that changes a wishlist.
+5. **Grid columns (per the design):**
    - Wishlist name;
    - Owner: customer full name, or "Guest";
-   - Owner email (empty for guests);
-   - Owner type: "Customer", "Guest checkout" or "Guest";
-   - Products (count);
-   - Default (yes/no);
-   - Last updated;
-   - Shop (multistore only);
-   - View action.
-6. **Search by customer (Scenario 8):** one filter on *Owner* that matches first name, last name, "first last" and email (`LIKE`), plus an *Owner type* select filter. Also filters on wishlist name, ID, products (range) and dates (core date-range filter). Default sort: last updated, newest first.
-7. **Guests (Scenario 6):** shown as **"Guest"**, with a short stable reference (`Guest · a1b2c3`, the first 6 hex characters of the stored `owner_key` hash). This lets an employee tell two guests apart. It's a hash of a hash, so it can't be used to impersonate the browser. Guest-checkout customers show their name and email with a "Guest checkout" type.
-8. **Detail page** (`/wishlists/{id}`):
-   - **header:** name, a Default badge, product count, created/updated dates, shop;
-   - **owner card:** name, email, a link to the native *Customer* page (read-only navigation), or "Guest" + reference;
-   - **products table:** image, name (linking to the native product edit page in a new tab, for navigation only), combination, reference, current price, availability status, date added;
-   - an empty-state message for lists with no products (Scenario 7);
-   - an unknown ID gives a native 404-style page with a "back to wishlists" link.
-9. **Prices and images, as the shop sells them now:**
-   - price: `Product::getPriceStatic(…, $taxIncluded = true, $idProductAttribute)` for the list's shop, default currency and the default customer group, formatted with the back-office locale;
-   - image: the combination's image, else the product cover, via `Link::getImageLink(…, 'small_default')`;
-   - a deleted product shows its saved `fallback_name` and a "Deleted product" badge; disabled or out-of-stock products show a status badge.
+   - Email: only for an identified customer, empty for guests;
+   - Products: the number of saved entries, unavailable products included, 0 for an empty list;
+   - View action;
+   - Shop, only in multistore mode.
 
-   Employees see everything (no storefront catalog-access redaction): they're authorised staff, and the purpose is visibility.
+   Sorting and pagination are usability extras (the design calls them proposals). Pagination and counts are computed server-side.
+6. **Search by customer (Scenario 8):**
+   - one search field for **name or email**, with Search and Reset (core grid filter);
+   - it matches first name, last name, "first last" and email (`LIKE`) within the shop scope;
+   - the filter, sort and page live in the grid parameters, so the detail page's back link returns to the same filtered view;
+   - a search with no results keeps the term, explains that no wishlist matches, and offers Reset.
+7. **Guests (Scenario 6):** shown as **"Guest"** with no email and **no technical identifier** (no hash or cookie fragment), per the design. Guest-checkout customers have a customer record, so they show their name and email like registered customers.
+8. **Detail page** (`/wishlists/{id}`):
+   - **title:** the wishlist name, plus a back link to the grid with its filter, sort and page;
+   - **summary:** owner (name, or "Guest"), email only for an identified customer, product count;
+   - **products table:** image, name, variant when there is one, current price with its context. No product links, and no edit, delete, move or add-to-cart buttons;
+   - **empty list:** "This wishlist contains no products", count 0, no empty table (Scenario 7);
+   - an unknown or out-of-scope ID gives the same generic "not available" page, without name, owner, count or contents.
+9. **Prices and images:**
+   - **Price context, implemented as proposed, product sign-off still pending.** The design asks for sign-off before implementation. The context: the list's shop, its default currency, tax included, as an unidentified storefront visitor sees it. It's computed with `Product::getPriceStatic()` in a cloned context and formatted with the back-office locale. The column header says "Price (tax incl., EUR)", and the page states that the price is a visitor price, not the customer's personalised one. Changing the context later only touches `WishlistDetailProvider::priceContext()`.
+   - **Price unavailable:** when no price can be computed (deleted product or combination), show "Price unavailable" instead of a number.
+   - **Image:** the combination's image, else the product cover, via `Link::getImageLink(…, 'small_default')`; the native "no picture" image when there is none.
+   - **Deleted product:** "Unavailable product" (the saved `fallback_name` is not shown, as the design asks), with no link and "Price unavailable".
+
+   Employees see current catalog data without the storefront's customer-group redaction: they are authorised staff, and the purpose is visibility.
 10. **Multistore:** the grid is scoped to the back-office shop context (`Shop::getContextListShopID()`); the Shop column only appears in multistore mode. The detail page refuses lists outside the context with the same "not found".
 11. **Performance:**
     - one paginated SQL query with `LEFT JOIN customer` and a grouped count subquery;
     - a separate `COUNT(*)` for the pager (core pattern);
     - existing indexes: `owner (id_shop, owner_key)`, `customer (id_customer)`, items `wishlist_order (id_wishlist, …)`;
     - detail pages batch-load product data for their entries (no N+1 per row).
+
+## 2.1 Look and feel (per the design tab)
+
+- **Native back office only:** the pages extend `@PrestaShop/Admin/layout.html.twig`, the grid uses `@PrestaShop/Admin/Common/Grid/grid_panel.html.twig`, and the detail page uses native cards and tables. They inherit the installed admin theme (IBM Plex Sans, Material Symbols, the CDK tokens) and add no second framework or token block.
+- **Long content:** long list names, variant labels and missing thumbnails are handled by wrapping and the native placeholder image. All text goes through admin translations (`Modules.Summitwishlist.Admin`); no sample data is hardcoded.
+- **Loading and error states:** the grid and detail are server-rendered, so a slow or failed load shows the native back-office error page with a Retry link back to the same URL. There is no client-side loading spinner to build.
 
 ## 3. Security (Scenarios 9, 10)
 
@@ -85,7 +113,7 @@ Same rule as Stage 2: **replace the files, click Upgrade, lose nothing.** For St
 | Translation domain `Modules.Summitwishlist.Admin` | new strings only | already used for the module name; nothing reworded |
 
 - **Disable, enable, uninstall:** core hides the tab when the module is disabled and removes it on uninstall (module-owned tab). Uninstall still drops the tables (documented, unchanged).
-- **Rollback check:** with 1.2.0 installed, put back the 1.1.0 files. The storefront is unaffected, but the leftover tab would point at a route that no longer exists. The rollback note therefore says: disable or reset the module, or delete the tab, after a downgrade. This is the one non-transparent part, and it's documented in the README.
+- **Rollback check:** with 1.2.0 installed, put back the 1.1.0 files. The storefront is unaffected, but the leftover tab would point at a route that no longer exists. The rollback note therefore says: delete the tab (*Advanced Parameters → Menus*) after a downgrade. Never Reset, because that reinstalls the module and drops the tables. This is the one non-transparent part, and it's documented in the README.
 - **PHP / PS versions:** unchanged (PS 9.0+, PHP 8.1+); attributes such as `#[AdminSecurity]` require 9.x, which the module already requires.
 
 ### 4.4 Verification (all required before release)
@@ -104,18 +132,21 @@ Same rule as Stage 2: **replace the files, click Upgrade, lose nothing.** For St
 ## 5. Files (additive)
 
 ```
-config/routes.yml                                  admin routes (GET only)
-config/admin/services.yml                          grid definition, query builder, data factory, grid factory, controller wiring
-vendor/autoload.php                                PSR-4 for Summit\Wishlist\ (kernel include)
-src/Admin/Controller/WishlistAdminController.php   listAction, viewAction (read-only)
-src/Admin/Grid/WishlistGridDefinitionFactory.php   columns, filters, View row action
-src/Admin/Grid/WishlistQueryBuilder.php            search + count queries, shop context
-src/Admin/Grid/WishlistFilters.php                 default sort/limit
-src/Admin/Detail/WishlistDetailProvider.php        metadata, owner, entries with price/image/status
-views/templates/admin/wishlist/list.html.twig      core grid layout
-views/templates/admin/wishlist/view.html.twig      detail (cards + products table + empty state)
-upgrade/upgrade-1.2.0.php                          creates the tab (idempotent)
-summitwishlist.php                                 version 1.2.0, $tabs for fresh installs
+composer.json, vendor/                                   PSR-4 autoload (composer dump-autoload)
+config.xml
+config/common.yml                                        storefront/shared services (DBAL repository, services, session)
+config/front/services.yml                                imports common.yml
+config/services.yml                                      imports common.yml + admin controller, grid, detail provider
+config/routes.yml                                        admin routes: GET list, POST search (filters only), GET view
+src/Controller/Admin/WishlistController.php              index/search/view, #[AdminSecurity] read
+src/Grid/Definition/Factory/WishlistGridDefinitionFactory.php
+src/Grid/Query/WishlistQueryBuilder.php                  paginated query, grouped counts, shop context, sort whitelist
+src/Grid/Filters/WishlistFilters.php
+src/Grid/Data/WishlistGridDataFactory.php                "Guest" / no email / owner key dropped
+src/Admin/WishlistDetailProvider.php                     detail read model (batched names, variants, images; prices)
+src/Owner/WishlistSession.php                            per-request owner + guest claim (was in ServiceFactory)
+views/templates/admin/wishlist/index.html.twig, view.html.twig, views/js/admin/wishlist-grid.js
+upgrade/upgrade-1.2.0.php                                creates/updates the tab (idempotent)
 ```
 
 ## 6. Build order (with a demo checkpoint after each step)
@@ -150,7 +181,8 @@ The seed data for 2/5/8 (a customer "John Doe" with three lists) comes from stor
 
 ## 8. Open questions
 
-1. **Menu placement:** *Customers → Wishlists* (recommended) or *Catalog*?
-2. **Guest reference:** OK to show `Guest · a1b2c3` (a hash fragment) so employees can tell guests apart, or plain "Guest" only?
-3. **Product link target:** product edit page in the back office (recommended, for navigation only) or the storefront product page?
-4. **GDPR export/erase** (`psgdpr` hooks): include wishlists in the customer's data export and erase? Not required by Task 3; recommend a small follow-up.
+1. **Price context (blocking for the detail page):** confirm the proposal in decision 9 (shop default currency, default customer group, tax included), or name the context the product team wants.
+2. **Menu placement:** *Customers → Wishlists* (recommended) or *Catalog*?
+3. **GDPR export/erase** (`psgdpr` hooks): include wishlists in the customer's data export and erase? Not required by Task 3; recommend a small follow-up.
+
+Settled by the design: plain "Guest" with no identifier; no product links on the detail page; grid columns name, owner, email, count, View.

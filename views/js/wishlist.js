@@ -494,6 +494,23 @@
     document.querySelectorAll('[data-sw-wishlist-form]').forEach(initSelection);
     if (window.prestashop && typeof window.prestashop.on === 'function') {
       window.prestashop.on('updateProductList', function () { placeHearts(); });
+      window.prestashop.on('updatedProduct', refreshPdpTrigger);
+    }
+  }
+
+  /**
+   * The refresh response renders the PDP trigger for the newly selected combination, but the
+   * theme does not always swap the block that holds it; swap ours so its combination and state match.
+   */
+  function refreshPdpTrigger(event) {
+    var html = event && typeof event.product_add_to_cart === 'string' ? event.product_add_to_cart : '';
+    var current = document.querySelector('.sw-pdp');
+    if (!html || !current) {
+      return;
+    }
+    var fresh = new DOMParser().parseFromString(html, 'text/html').querySelector('.sw-pdp');
+    if (fresh) {
+      current.replaceWith(document.importNode(fresh, true));
     }
   }
 

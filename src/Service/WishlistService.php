@@ -48,6 +48,25 @@ class WishlistService
         $this->defaultName = $defaultName;
     }
 
+    /** Container factory (config/common.yml): the default list name is translated per request. */
+    public static function fromContext(
+        WishlistRepositoryInterface $repository,
+        WishlistAccessPolicy $accessPolicy,
+        ProductCatalogInterface $catalog,
+        PurchasePolicy $purchasePolicy,
+        CartGatewayInterface $cartGateway,
+        \Context $context
+    ): self {
+        return new self(
+            $repository,
+            $accessPolicy,
+            $catalog,
+            $purchasePolicy,
+            $cartGateway,
+            $context->getTranslator()->trans('My wishlist', [], 'Modules.Summitwishlist.Shop')
+        );
+    }
+
     public function getDefaultWishlist(WishlistOwner $owner, bool $create = false): ?array
     {
         $wishlist = $this->repository->findDefault($owner->getShopId(), $owner->getOwnerKey());

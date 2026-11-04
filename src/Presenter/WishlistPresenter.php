@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Summit\Wishlist\Presenter;
 
 use Context;
-use Db;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 use PrestaShop\PrestaShop\Adapter\Image\ImageRetriever;
 use PrestaShop\PrestaShop\Adapter\Presenter\Product\ProductListingPresenter;
 use PrestaShop\PrestaShop\Adapter\Product\PriceFormatter;
@@ -21,18 +22,13 @@ use Summit\Wishlist\Service\WishlistService;
  */
 class WishlistPresenter
 {
-    /** @var Context */
-    private $context;
-    /** @var WishlistService */
-    private $service;
-    /** @var ProductCatalogInterface */
-    private $catalog;
-
-    public function __construct(Context $context, WishlistService $service, ProductCatalogInterface $catalog)
-    {
-        $this->context = $context;
-        $this->service = $service;
-        $this->catalog = $catalog;
+    public function __construct(
+        private readonly Context $context,
+        private readonly WishlistService $service,
+        private readonly ProductCatalogInterface $catalog,
+        private readonly Connection $connection,
+        private readonly string $dbPrefix,
+    ) {
     }
 
     /**
@@ -115,15 +111,13 @@ class WishlistPresenter
     private function existingProductIds(array $productIds): array
     {
         $productIds = array_values(array_unique(array_map('intval', $productIds)));
-        $rows = Db::getInstance()->executeS(
-            'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'product_shop`
-            WHERE `id_shop` = ' . (int) $this->context->shop->id . '
-              AND `id_product` IN (' . implode(',', $productIds) . ')',
-            true,
-            false
-        ) ?: [];
+        $ids = $this->connection->fetchFirstColumn(
+            'SELECT `id_product` FROM `' . $this->dbPrefix . 'product_shop` WHERE `id_shop` = ? AND `id_product` IN (?)',
+            [(int) $this->context->shop->id, $productIds],
+            [\PDO::PARAM_INT, ArrayParameterType::INTEGER]
+        );
 
-        return array_fill_keys(array_map('intval', array_column($rows, 'id_product')), true);
+        return array_fill_keys(array_map('intval', $ids), true);
     }
 
     /**

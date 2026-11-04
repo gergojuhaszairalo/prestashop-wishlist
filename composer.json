@@ -1,0 +1,22 @@
+{
+    "name": "ps-summit/summitwishlist",
+    "description": "Guest and customer wishlists for PrestaShop 9",
+    "license": "AFL-3.0",
+    "authors": [
+        {
+            "name": "PS Summit Hackathon team"
+        }
+    ],
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Summit\\Wishlist\\": "src/"
+        }
+    },
+    "config": {
+        "prepend-autoloader": false
+    },
+    "type": "prestashop-module"
+}

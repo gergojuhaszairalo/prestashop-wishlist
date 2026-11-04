@@ -107,7 +107,8 @@ try {
     $private = fixtureProduct($savedName, (int) $category->id, $shopId, $products);
     $public = fixtureProduct('Wishlist public control ' . $suffix, (int) $context->shop->getCategory(), $shopId, $products);
 
-    $repository = new DbWishlistRepository(Db::getInstance());
+    $connection = PrestaShop\PrestaShop\Adapter\SymfonyContainer::getInstance()->get('doctrine.dbal.default_connection');
+    $repository = new DbWishlistRepository($connection, _DB_PREFIX_);
     $context->customer = new Customer();
     $context->cart = new Cart();
     $catalog = new PrestaShopProductCatalog($context);
@@ -147,7 +148,7 @@ try {
     check($service->addItem($owner, $listId, (int) $public->id, 0)['code'] === 'added', 'public control product remains savable');
     $items = $service->getItems($owner, $listId);
     $privateItemId = (int) $items[0]['id_wishlist_product'];
-    $presenter = new WishlistPresenter($context, $service, $catalog);
+    $presenter = new WishlistPresenter($context, $service, $catalog, $connection, _DB_PREFIX_);
     $allowedRows = $presenter->present($items);
     check($allowedRows[0]['name'] === $savedName && $allowedRows[0]['price'] !== null, 'authorized customer sees current catalog data');
 

@@ -9,18 +9,25 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-spl_autoload_register(static function (string $class): void {
-    $prefix = 'Summit\\Wishlist\\';
-    if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
-        return;
-    }
-    $file = __DIR__ . '/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
-    if (is_file($file)) {
-        require_once $file;
-    }
-});
+// Composer PSR-4 autoloader (example-modules convention). The kernel also includes it for
+// active modules; requiring it here covers install and legacy entry points.
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+} else {
+    // Safety net for a copy without vendor/: the same PSR-4 mapping, so the storefront keeps working.
+    spl_autoload_register(static function (string $class): void {
+        $prefix = 'Summit\\Wishlist\\';
+        if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
+            return;
+        }
+        $file = __DIR__ . '/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+        if (is_file($file)) {
+            require_once $file;
+        }
+    });
+}
 
-use Summit\Wishlist\Install\Installer;
+use Summit\Wishlist\Controller\Admin\WishlistController;
 use Summit\Wishlist\Service\ServiceFactory;
 
 class Summitwishlist extends Module
@@ -36,16 +43,48 @@ class Summitwishlist extends Module
     {
         $this->name = 'summitwishlist';
         $this->tab = 'front_office_features';
-        $this->version = '1.1.0';
+        $this->version = '1.2.0';
         $this->author = 'PS Summit Hackathon team';
         $this->need_instance = 0;
-        $this->ps_versions_compliancy = ['min' => '9.0.0', 'max' => _PS_VERSION_];
+        $this->ps_versions_compliancy = ['min' => '9.0.0', 'max' => '9.99.99'];
         $this->bootstrap = true;
 
         parent::__construct();
 
         $this->displayName = $this->trans('Summit Wishlist', [], 'Modules.Summitwishlist.Admin');
         $this->description = $this->trans('Lets guests and customers save products to a wishlist and add them to the cart later.', [], 'Modules.Summitwishlist.Admin');
+
+        // Customers > Wishlists, registered by core on install (democontrollertabs convention).
+        // Upgrades from 1.1.0 and earlier create it in upgrade/upgrade-1.2.0.php.
+        $this->tabs = [self::adminTab($this)];
+    }
+
+    /**
+     * The back-office tab definition, shared by $tabs (install) and the 1.2.0 upgrade.
+     *
+     * @return array<string, mixed>
+     */
+    public static function adminTab(Module $module): array
+    {
+        $names = [];
+        foreach (Language::getLanguages(false) as $language) {
+            $names[$language['locale']] = $module->getTranslator()->trans('Wishlists', [], 'Modules.Summitwishlist.Admin', $language['locale']);
+        }
+
+        return [
+            'route_name' => 'summitwishlist_admin_index',
+            'class_name' => WishlistController::TAB_CLASS_NAME,
+            'visible' => true,
+            'name' => $names,
+            'parent_class_name' => 'AdminParentCustomer',
+            'wording' => 'Wishlists',
+            'wording_domain' => 'Modules.Summitwishlist.Admin',
+        ];
+    }
+
+    public function getContent(): void
+    {
+        Tools::redirectAdmin($this->context->link->getAdminLink(WishlistController::TAB_CLASS_NAME));
     }
 
     public function isUsingNewTranslationSystem(): bool
@@ -56,13 +95,13 @@ class Summitwishlist extends Module
     public function install(): bool
     {
         return parent::install()
-            && (new Installer())->install()
+            && $this->getServices()->installer()->install()
             && $this->registerHook($this->getHooks());
     }
 
     public function uninstall(): bool
     {
-        return (new Installer())->uninstall() && parent::uninstall();
+        return $this->getServices()->installer()->uninstall() && parent::uninstall();
     }
 
     /**
@@ -86,7 +125,13 @@ class Summitwishlist extends Module
     public function getServices(): ServiceFactory
     {
         if ($this->services === null) {
-            $this->services = new ServiceFactory($this->context);
+            try {
+                $container = $this->getContainer();
+            } catch (Throwable $e) {
+                // No container yet (some install paths): ServiceFactory wires services by hand.
+                $container = null;
+            }
+            $this->services = new ServiceFactory($this->context, $container);
         }
 
         return $this->services;

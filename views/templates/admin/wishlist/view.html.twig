@@ -1,0 +1,104 @@
+{% extends '@PrestaShop/Admin/layout.html.twig' %}
+{% trans_default_domain 'Modules.Summitwishlist.Admin' %}
+
+{% block content %}
+  <p>
+    <a href="{{ path('summitwishlist_admin_index') }}">
+      <i class="material-icons" aria-hidden="true">arrow_back</i>
+      {{ 'Back to wishlists'|trans }}
+    </a>
+  </p>
+
+  {% if wishlist is null %}
+    <div class="card">
+      <div class="card-body">
+        <p class="mb-0">{{ 'This wishlist does not exist or is not available in the current shop context.'|trans }}</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <h3 class="card-header">
+        <i class="material-icons" aria-hidden="true">favorite_border</i>
+        <span class="text-break">{{ wishlist.name }}</span>
+      </h3>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-3">{{ 'Owner'|trans }}</dt>
+          <dd class="col-sm-9">{{ wishlist.owner_name }}</dd>
+          {% if wishlist.email %}
+            <dt class="col-sm-3">{{ 'Email'|trans({}, 'Admin.Global') }}</dt>
+            <dd class="col-sm-9">{{ wishlist.email }}</dd>
+          {% endif %}
+          {% if wishlist.multistore and wishlist.shop_name %}
+            <dt class="col-sm-3">{{ 'Shop'|trans({}, 'Admin.Global') }}</dt>
+            <dd class="col-sm-9">{{ wishlist.shop_name }}</dd>
+          {% endif %}
+          <dt class="col-sm-3">{{ 'Products'|trans }}</dt>
+          <dd class="col-sm-9">{{ wishlist.product_count }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="card-header">{{ 'Saved products'|trans }}</h3>
+      <div class="card-body">
+        {% if wishlist.items is empty %}
+          <p class="mb-0">{{ 'This wishlist contains no products.'|trans }}</p>
+        {% else %}
+          <p class="text-muted">
+            {{ 'Prices are current catalog prices, tax included, in %currency%, as a storefront visitor sees them. They are not the price personalised for this customer.'|trans({'%currency%': wishlist.currency_iso}) }}
+          </p>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ 'Image'|trans({}, 'Admin.Global') }}</th>
+                  <th scope="col">{{ 'Product'|trans({}, 'Admin.Global') }}</th>
+                  <th scope="col">{{ 'Combination'|trans({}, 'Admin.Global') }}</th>
+                  <th scope="col">{{ 'Price (tax incl., %currency%)'|trans({'%currency%': wishlist.currency_iso}) }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in wishlist.items %}
+                  <tr>
+                    <td>
+                      {% if item.image_url %}
+                        <img src="{{ item.image_url }}" alt="" width="64" height="64" loading="lazy" class="img-thumbnail">
+                      {% else %}
+                        <i class="material-icons text-muted" aria-hidden="true">image_not_supported</i>
+                      {% endif %}
+                    </td>
+                    <td class="text-break">
+                      {% if item.available %}
+                        {{ item.name }}
+                        {% if not item.active %}
+                          <span class="badge badge-secondary">{{ 'Disabled'|trans({}, 'Admin.Global') }}</span>
+                        {% endif %}
+                      {% else %}
+                        <em>{{ 'Unavailable product'|trans }}</em>
+                      {% endif %}
+                    </td>
+                    <td class="text-break">
+                      {% if item.combination_missing %}
+                        <em>{{ 'Combination no longer available'|trans }}</em>
+                      {% else %}
+                        {{ item.variant ?: '—' }}
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if item.price is not null %}
+                        {{ item.price }}
+                      {% else %}
+                        <em>{{ 'Price unavailable'|trans }}</em>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

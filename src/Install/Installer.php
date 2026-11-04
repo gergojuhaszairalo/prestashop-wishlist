@@ -4,19 +4,25 @@ declare(strict_types=1);
 
 namespace Summit\Wishlist\Install;
 
-use Db;
+use Doctrine\DBAL\Connection;
 
 /**
- * Creates and drops the module schema. Uses Db directly so it works
- * during install/upgrade, before any module service is available.
+ * Creates and drops the module schema (example-modules convention: demodoctrine's installer,
+ * built by hand in the module during install because module services aren't registered yet).
+ * Install never drops existing tables: a reinstall over kept data stays non-destructive.
  */
 class Installer
 {
+    public function __construct(
+        private readonly Connection $connection,
+        private readonly string $dbPrefix,
+    ) {
+    }
+
     public function install(): bool
     {
-        $db = Db::getInstance();
         $engine = _MYSQL_ENGINE_;
-        $prefix = _DB_PREFIX_;
+        $prefix = $this->dbPrefix;
 
         // default_marker is 1 for an owner's default list and NULL otherwise, so the
         // unique key allows one default per owner while permitting more lists later.
@@ -47,7 +53,10 @@ class Installer
             KEY `wishlist_order` (`id_wishlist`, `id_wishlist_product`)
         ) ENGINE={$engine} DEFAULT CHARSET=utf8mb4";
 
-        return $db->execute($wishlist) && $db->execute($items);
+        $this->connection->executeStatement($wishlist);
+        $this->connection->executeStatement($items);
+
+        return true;
     }
 
     /**
@@ -55,10 +64,9 @@ class Installer
      */
     public function uninstall(): bool
     {
-        $prefix = _DB_PREFIX_;
+        $prefix = $this->dbPrefix;
+        $this->connection->executeStatement("DROP TABLE IF EXISTS `{$prefix}summitwishlist_product`, `{$prefix}summitwishlist`");
 
-        return Db::getInstance()->execute(
-            "DROP TABLE IF EXISTS `{$prefix}summitwishlist_product`, `{$prefix}summitwishlist`"
-        );
+        return true;
     }
 }

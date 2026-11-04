@@ -1,0 +1,71 @@
+# Storefront and shared services (example-modules convention: demodoctrine/config/common.yml),
+# imported by config/front/services.yml and config/services.yml. Explicit arguments, no
+# autowiring, so the legacy front container builds them the same way as the Symfony kernel.
+services:
+  _defaults:
+    public: true
+
+  summitwishlist.context:
+    class: Context
+    factory: ['Context', 'getContext']
+
+  Summit\Wishlist\Install\Installer:
+    arguments: ['@doctrine.dbal.default_connection', '%database_prefix%']
+
+  Summit\Wishlist\Repository\DbWishlistRepository:
+    arguments: ['@doctrine.dbal.default_connection', '%database_prefix%']
+
+  Summit\Wishlist\Repository\WishlistRepositoryInterface:
+    alias: Summit\Wishlist\Repository\DbWishlistRepository
+    public: true
+
+  Summit\Wishlist\Catalog\PrestaShopProductCatalog:
+    arguments: ['@summitwishlist.context']
+
+  Summit\Wishlist\Security\CsrfTokenManager:
+    factory: ['Summit\Wishlist\Security\CsrfTokenManager', 'fromContext']
+    arguments: ['@summitwishlist.context']
+
+  Summit\Wishlist\Service\WishlistAccessPolicy: ~
+
+  Summit\Wishlist\Service\WishlistNameValidator: ~
+
+  Summit\Wishlist\Cart\PurchasePolicy:
+    arguments: ['@summitwishlist.context', '@Summit\Wishlist\Catalog\PrestaShopProductCatalog']
+
+  Summit\Wishlist\Cart\PrestaShopCartGateway:
+    arguments: ['@summitwishlist.context']
+
+  Summit\Wishlist\Service\WishlistService:
+    factory: ['Summit\Wishlist\Service\WishlistService', 'fromContext']
+    arguments:
+      - '@Summit\Wishlist\Repository\DbWishlistRepository'
+      - '@Summit\Wishlist\Service\WishlistAccessPolicy'
+      - '@Summit\Wishlist\Catalog\PrestaShopProductCatalog'
+      - '@Summit\Wishlist\Cart\PurchasePolicy'
+      - '@Summit\Wishlist\Cart\PrestaShopCartGateway'
+      - '@summitwishlist.context'
+
+  Summit\Wishlist\Service\WishlistListManager:
+    arguments:
+      - '@Summit\Wishlist\Repository\DbWishlistRepository'
+      - '@Summit\Wishlist\Service\WishlistAccessPolicy'
+      - '@Summit\Wishlist\Catalog\PrestaShopProductCatalog'
+      - '@Summit\Wishlist\Service\WishlistNameValidator'
+
+  Summit\Wishlist\Presenter\WishlistPresenter:
+    arguments:
+      - '@summitwishlist.context'
+      - '@Summit\Wishlist\Service\WishlistService'
+      - '@Summit\Wishlist\Catalog\PrestaShopProductCatalog'
+      - '@doctrine.dbal.default_connection'
+      - '%database_prefix%'
+
+  Summit\Wishlist\Owner\OwnerResolver:
+    arguments: ['@summitwishlist.context']
+
+  Summit\Wishlist\Owner\WishlistSession:
+    arguments:
+      - '@Summit\Wishlist\Owner\OwnerResolver'
+      - '@Summit\Wishlist\Service\WishlistListManager'
+      - '@Summit\Wishlist\Service\WishlistService'

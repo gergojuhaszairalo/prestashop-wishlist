@@ -5,48 +5,49 @@ declare(strict_types=1);
 namespace Summit\Wishlist\Service;
 
 use Context;
-use Db;
-use PrestaShopLogger;
+use Doctrine\DBAL\Connection;
 use Summit\Wishlist\Cart\PrestaShopCartGateway;
 use Summit\Wishlist\Cart\PurchasePolicy;
 use Summit\Wishlist\Catalog\PrestaShopProductCatalog;
+use Summit\Wishlist\Install\Installer;
 use Summit\Wishlist\Owner\OwnerResolver;
 use Summit\Wishlist\Owner\WishlistOwner;
+use Summit\Wishlist\Owner\WishlistSession;
 use Summit\Wishlist\Presenter\WishlistPresenter;
 use Summit\Wishlist\Repository\DbWishlistRepository;
 use Summit\Wishlist\Security\CsrfTokenManager;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Explicit wiring. Works in front office, back office and install code
- * without a Symfony cache rebuild; replace with config/common.yml when the API needs DI.
+ * Service access for hooks and front controllers. Services are defined in config/common.yml
+ * and taken from the container (example-modules convention). When the container does not
+ * know them yet (during install, or right after the 1.2.0 files replace 1.1.0 and before
+ * the cache is rebuilt) they are wired by hand the same way, as demodoctrine does for its
+ * installer, so the storefront never breaks on a stale container.
  */
 class ServiceFactory
 {
-    /** @var Context */
-    private $context;
     /** @var array<string, object> */
-    private $instances = [];
-    /** @var WishlistOwner|null */
-    private $owner;
-    /** @var int */
-    private $claimed = 0;
-    /** @var int */
-    private $claimRenamed = 0;
+    private array $instances = [];
 
-    public function __construct(Context $context)
+    public function __construct(
+        private readonly Context $context,
+        private readonly ?ContainerInterface $container = null,
+    ) {
+    }
+
+    public function session(): WishlistSession
     {
-        $this->context = $context;
+        return $this->resolve(WishlistSession::class, fn () => new WishlistSession(
+            new OwnerResolver($this->context),
+            $this->listManager(),
+            $this->wishlistService()
+        ));
     }
 
     public function owner(): WishlistOwner
     {
-        if ($this->owner === null) {
-            $resolver = new OwnerResolver($this->context);
-            $this->owner = $resolver->resolve();
-            $this->claimPendingGuestList($resolver, $this->owner);
-        }
-
-        return $this->owner;
+        return $this->session()->owner();
     }
 
     /**
@@ -54,7 +55,7 @@ class ServiceFactory
      */
     public function claimedCount(): int
     {
-        return $this->claimed;
+        return $this->session()->claimedCount();
     }
 
     /**
@@ -62,70 +63,88 @@ class ServiceFactory
      */
     public function claimRenamedCount(): int
     {
-        return $this->claimRenamed;
+        return $this->session()->claimRenamedCount();
     }
 
-    /**
-     * Lazy claim, modelled on the core cart: the first request after any login path moves the
-     * guest's lists into the account. Idempotent: the guest token is forgotten only after the
-     * claim committed; on failure it is kept so the next request retries, and the page renders.
-     */
-    private function claimPendingGuestList(OwnerResolver $resolver, WishlistOwner $owner): void
+    public function installer(): Installer
     {
-        $guest = $resolver->pendingGuestOwner();
-        if ($guest === null) {
-            return;
-        }
-        try {
-            $result = $this->listManager()->claimGuestLists($guest, $owner);
-            $this->claimed = $result['items'];
-            $this->claimRenamed = $result['renamed'];
-            $this->wishlistService()->forgetSavedState();
-            $resolver->forgetGuest();
-        } catch (\Throwable $e) {
-            PrestaShopLogger::addLog('summitwishlist: guest list claim failed: ' . $e->getMessage(), 2, null, 'Customer', (int) $owner->getCustomerId());
-        }
+        return $this->resolve(Installer::class, fn () => new Installer($this->connection(), _DB_PREFIX_));
     }
 
     public function repository(): DbWishlistRepository
     {
-        return $this->instances['repository'] ??= new DbWishlistRepository(Db::getInstance());
+        return $this->resolve(DbWishlistRepository::class, fn () => new DbWishlistRepository($this->connection(), _DB_PREFIX_));
     }
 
     public function catalog(): PrestaShopProductCatalog
     {
-        return $this->instances['catalog'] ??= new PrestaShopProductCatalog($this->context);
+        return $this->resolve(PrestaShopProductCatalog::class, fn () => new PrestaShopProductCatalog($this->context));
     }
 
     public function csrf(): CsrfTokenManager
     {
-        return $this->instances['csrf'] ??= new CsrfTokenManager($this->context->cookie, (string) _COOKIE_KEY_);
+        return $this->resolve(CsrfTokenManager::class, fn () => CsrfTokenManager::fromContext($this->context));
     }
 
     public function wishlistService(): WishlistService
     {
-        return $this->instances['service'] ??= new WishlistService(
+        return $this->resolve(WishlistService::class, fn () => WishlistService::fromContext(
             $this->repository(),
             new WishlistAccessPolicy(),
             $this->catalog(),
             new PurchasePolicy($this->context, $this->catalog()),
             new PrestaShopCartGateway($this->context),
-            $this->context->getTranslator()->trans('My wishlist', [], 'Modules.Summitwishlist.Shop')
-        );
+            $this->context
+        ));
     }
 
     public function listManager(): WishlistListManager
     {
-        return $this->instances['lists'] ??= new WishlistListManager(
+        return $this->resolve(WishlistListManager::class, fn () => new WishlistListManager(
             $this->repository(),
             new WishlistAccessPolicy(),
             $this->catalog(),
             new WishlistNameValidator()
-        );
+        ));
     }
 
     public function presenter(): WishlistPresenter
     {
-        return $this->instances['presenter'] ??= new WishlistPresenter($this->context, $this->wishlistService(), $this->catalog());
+        return $this->resolve(WishlistPresenter::class, fn () => new WishlistPresenter(
+            $this->context,
+            $this->wishlistService(),
+            $this->catalog(),
+            $this->connection(),
+            _DB_PREFIX_
+        ));
+    }
+
+    /**
+     * @template T of object
+     *
+     * @param class-string<T> $id
+     * @param callable(): T $build
+     *
+     * @return T
+     */
+    private function resolve(string $id, callable $build): object
+    {
+        if (isset($this->instances[$id])) {
+            return $this->instances[$id];
+        }
+        if ($this->container !== null && $this->container->has($id)) {
+            return $this->instances[$id] = $this->container->get($id);
+        }
+
+        return $this->instances[$id] = $build();
+    }
+
+    private function connection(): Connection
+    {
+        if ($this->container !== null && $this->container->has('doctrine.dbal.default_connection')) {
+            return $this->container->get('doctrine.dbal.default_connection');
+        }
+
+        return \PrestaShop\PrestaShop\Adapter\SymfonyContainer::getInstance()->get('doctrine.dbal.default_connection');
     }
 }

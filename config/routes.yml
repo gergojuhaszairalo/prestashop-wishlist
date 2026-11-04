@@ -1,0 +1,27 @@
+# Back-office routes (Stage 3, read-only). See example-modules/demo_grid and
+# https://devdocs.prestashop-project.org/9/modules/concepts/controllers/admin-controllers/
+summitwishlist_admin_index:
+  path: /summitwishlist/wishlists
+  methods: [GET]
+  defaults:
+    _controller: 'Summit\Wishlist\Controller\Admin\WishlistController::indexAction'
+    _legacy_controller: 'AdminSummitWishlist'
+    _legacy_link: 'AdminSummitWishlist'
+
+# The core grid's Search button: stores the employee's filters, then redirects to the listing.
+summitwishlist_admin_search:
+  path: /summitwishlist/wishlists
+  methods: [POST]
+  defaults:
+    _controller: 'Summit\Wishlist\Controller\Admin\WishlistController::searchAction'
+    _legacy_controller: 'AdminSummitWishlist'
+    _legacy_link: 'AdminSummitWishlist:search'
+
+summitwishlist_admin_view:
+  path: /summitwishlist/wishlists/{wishlistId}
+  methods: [GET]
+  requirements:
+    wishlistId: '\d+'
+  defaults:
+    _controller: 'Summit\Wishlist\Controller\Admin\WishlistController::viewAction'
+    _legacy_controller: 'AdminSummitWishlist'

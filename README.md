@@ -31,8 +31,18 @@ Replace the module files with the newer version, then click **Upgrade** in the M
 - **Add to cart** reproduces the core cart controller's checks before calling `Cart::updateQty()`: shop and active/orderable status, customer-group access, combination validity, required customisation, minimal quantity, and stock/backorder rules. Results are reported per item. Adding to the cart never removes items from the wishlist or touches other cart lines.
 - **Unavailable items** (disabled, out of stock without backorders, deleted, restricted) stay visible with a reason and can't be added. Deleted products show the name saved when they were added.
 
+## Back office (1.2.0)
+
+**Customers → Wishlists** lists every wishlist in the current shop context: name, owner (customer name, or "Guest"), email for customers, and product count. It can be searched by customer name or email. **View** opens a read-only detail page with each entry's image, name, combination and current price (tax included, the shop's default currency, as a storefront visitor sees it). Nothing in the back office can change a wishlist. Access follows the tab's permissions per employee profile.
+
+## Development
+
+The module follows [PrestaShop/example-modules](https://github.com/PrestaShop/example-modules): Composer autoload, services in `config/common.yml` (imported by `config/front/services.yml` and `config/services.yml`), and admin routes in `config/routes.yml`. After adding or moving a class under `src/`, run `composer dump-autoload` in the module folder. `vendor/` is committed, so a plain file copy installs and upgrades without Composer.
+
 ## Changelog
 
+- **1.2.0:** Stage 3, a read-only back-office overview (*Customers → Wishlists*, created for upgraded shops by `upgrade/upgrade-1.2.0.php`). Restructured after the PrestaShop example modules: Composer autoload, container services, and DBAL instead of `Db`. Fix: the product-page heart now follows the selected combination. No schema change, and the storefront is otherwise unchanged. **Rollback to 1.1.0:** also delete the *Wishlists* tab (*Advanced Parameters → Menus*), because 1.1.0 has no route for it. Don't use Reset for this: it reinstalls the module and drops the wishlist tables.
+- **1.1.0:** Stage 2, multiple named wishlists with a default list, the membership picker, move, rename and delete. No schema change.
 - **1.0.1:** storefront redesign per the design proposal (`docs/design.md`); mobile header entry (`displayTop`, registered by `upgrade/upgrade-1.0.1.php`); guest list claimed into the account on login. No schema change.
 - **1.0.0:** Stage 1.
 

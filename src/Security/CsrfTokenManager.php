@@ -35,6 +35,12 @@ class CsrfTokenManager
         $this->secret = $secret;
     }
 
+    /** Container factory (config/common.yml): the cookie is the request's, the secret _COOKIE_KEY_. */
+    public static function fromContext(\Context $context): self
+    {
+        return new self($context->cookie, (string) _COOKIE_KEY_);
+    }
+
     public function getToken(WishlistOwner $owner): string
     {
         foreach (self::LEGACY_KEYS as $key) {
