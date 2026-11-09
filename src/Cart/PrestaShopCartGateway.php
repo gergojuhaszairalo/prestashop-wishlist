@@ -14,12 +14,9 @@ use Validate;
  */
 class PrestaShopCartGateway implements CartGatewayInterface
 {
-    /** @var Context */
-    private $context;
-
-    public function __construct(Context $context)
-    {
-        $this->context = $context;
+    public function __construct(
+        private readonly Context $context,
+    ) {
     }
 
     public function getCart(): Cart

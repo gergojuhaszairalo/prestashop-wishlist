@@ -17,35 +17,17 @@ use Summit\Wishlist\Repository\WishlistRepositoryInterface;
  */
 class WishlistService
 {
-    /** @var WishlistRepositoryInterface */
-    private $repository;
-    /** @var WishlistAccessPolicy */
-    private $accessPolicy;
-    /** @var ProductCatalogInterface */
-    private $catalog;
-    /** @var PurchasePolicy */
-    private $purchasePolicy;
-    /** @var CartGatewayInterface */
-    private $cartGateway;
-    /** @var string */
-    private $defaultName;
     /** @var array<string, array<string, true>> */
-    private $savedCache = [];
+    private array $savedCache = [];
 
     public function __construct(
-        WishlistRepositoryInterface $repository,
-        WishlistAccessPolicy $accessPolicy,
-        ProductCatalogInterface $catalog,
-        PurchasePolicy $purchasePolicy,
-        CartGatewayInterface $cartGateway,
-        string $defaultName
+        private readonly WishlistRepositoryInterface $repository,
+        private readonly WishlistAccessPolicy $accessPolicy,
+        private readonly ProductCatalogInterface $catalog,
+        private readonly PurchasePolicy $purchasePolicy,
+        private readonly CartGatewayInterface $cartGateway,
+        private readonly string $defaultName,
     ) {
-        $this->repository = $repository;
-        $this->accessPolicy = $accessPolicy;
-        $this->catalog = $catalog;
-        $this->purchasePolicy = $purchasePolicy;
-        $this->cartGateway = $cartGateway;
-        $this->defaultName = $defaultName;
     }
 
     /** Container factory (config/common.yml): the default list name is translated per request. */

@@ -30,6 +30,9 @@ export const env = {
   adminUrl: (process.env.SWL_ADMIN_URL ?? '').replace(/\/$/, ''),
   adminEmail: process.env.SWL_ADMIN_EMAIL ?? '',
   adminPassword: process.env.SWL_ADMIN_PASSWORD ?? '',
+  /** Optional employee whose profile lacks the Wishlists read right (Stage 3, Scenario 9). */
+  adminRestrictedEmail: process.env.SWL_ADMIN_RESTRICTED_EMAIL ?? '',
+  adminRestrictedPassword: process.env.SWL_ADMIN_RESTRICTED_PASSWORD ?? '',
 
   /** Optional prepared fixtures for the purchase-rule tests (review 2). Tests skip when unset. */
   minQtyProductId: int('SWL_MIN_QTY_PRODUCT_ID'),
@@ -40,3 +43,4 @@ export const env = {
 };
 
 export const hasAdmin = (): boolean => Boolean(env.adminUrl && env.adminEmail && env.adminPassword);
+export const hasRestrictedAdmin = (): boolean => hasAdmin() && Boolean(env.adminRestrictedEmail && env.adminRestrictedPassword);

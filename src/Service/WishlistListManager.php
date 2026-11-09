@@ -18,25 +18,12 @@ use Summit\Wishlist\Repository\WishlistRepositoryInterface;
  */
 class WishlistListManager
 {
-    /** @var WishlistRepositoryInterface */
-    private $repository;
-    /** @var WishlistAccessPolicy */
-    private $accessPolicy;
-    /** @var ProductCatalogInterface */
-    private $catalog;
-    /** @var WishlistNameValidator */
-    private $validator;
-
     public function __construct(
-        WishlistRepositoryInterface $repository,
-        WishlistAccessPolicy $accessPolicy,
-        ProductCatalogInterface $catalog,
-        WishlistNameValidator $validator
+        private readonly WishlistRepositoryInterface $repository,
+        private readonly WishlistAccessPolicy $accessPolicy,
+        private readonly ProductCatalogInterface $catalog,
+        private readonly WishlistNameValidator $validator,
     ) {
-        $this->repository = $repository;
-        $this->accessPolicy = $accessPolicy;
-        $this->catalog = $catalog;
-        $this->validator = $validator;
     }
 
     public function validator(): WishlistNameValidator

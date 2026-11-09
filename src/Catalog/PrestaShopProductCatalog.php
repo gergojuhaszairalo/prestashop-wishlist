@@ -11,12 +11,9 @@ use Validate;
 
 class PrestaShopProductCatalog implements ProductCatalogInterface
 {
-    /** @var Context */
-    private $context;
-
-    public function __construct(Context $context)
-    {
-        $this->context = $context;
+    public function __construct(
+        private readonly Context $context,
+    ) {
     }
 
     public function findSavableProduct(int $productId): ?Product

@@ -25,9 +25,8 @@ class SummitwishlistWishlistModuleFrontController extends ModuleFrontController
     use RespondsToShopper;
 
     /** @var array{dialog: string, list: int, field_error: string, value: string}|null */
-    private $failedForm;
-    /** @var string|null */
-    private $pageTitle;
+    private ?array $failedForm = null;
+    private ?string $pageTitle = null;
 
     public function postProcess(): void
     {

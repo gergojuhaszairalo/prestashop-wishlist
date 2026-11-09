@@ -21,7 +21,8 @@ Every test starts in a **fresh browser context**: a new guest with an empty wish
 | `SWL_BASE_URL` | everything | none (required) |
 | `SWL_COMBINATION_PRODUCT_ID`, `SWL_COMBINATION_GROUP`, `SWL_COMBINATION_OPTION` | product with combinations | `1`, `group[1]`, `M` (demo t-shirt) |
 | `SWL_CATEGORY_PATH` | listing page with several orderable products | `/index.php?id_category=3&controller=category` |
-| `SWL_ADMIN_URL`, `SWL_ADMIN_EMAIL`, `SWL_ADMIN_PASSWORD` | Scenario 11 (disables, then re-enables, a product) | none; the test is skipped without them |
+| `SWL_ADMIN_URL`, `SWL_ADMIN_EMAIL`, `SWL_ADMIN_PASSWORD` | Scenario 11 (disables, then re-enables, a product) and `admin.spec` (Stage 3 back office) | none; those tests are skipped without them |
+| `SWL_ADMIN_RESTRICTED_EMAIL`, `SWL_ADMIN_RESTRICTED_PASSWORD` | `admin.spec` › Scenario 9, an employee whose profile has no *Wishlists* read right | none; skipped without them |
 | `SWL_TOGGLE_PRODUCT_ID` | product Scenario 11 toggles | `6` |
 | `SWL_MIN_QTY_PRODUCT_ID`, `SWL_MIN_QTY` | minimal-quantity rule | none / `3` |
 | `SWL_CUSTOMIZABLE_PRODUCT_ID` | required-customisation rule | none |
@@ -38,6 +39,10 @@ Use local test-shop admin credentials only, passed through the environment. Neve
 - **Out of stock:** an active product with quantity 0 and *When out of stock: deny orders*.
 
 Scenario 11 needs no preparation: it disables `SWL_TOGGLE_PRODUCT_ID` through the back office after saving it, then re-enables it in a `finally` block.
+
+**Back office and SSL:** the back-office login refuses plain HTTP when *Enable SSL* is on. Behind ngrok, PrestaShop sees HTTP (the container's nginx sets `HTTPS` empty), so the admin tests can't sign in through either the tunnel or `http://localhost:8000`. For local runs, use a shop with SSL disabled, or terminate TLS so PHP sees `HTTPS=on`.
+
+**Stage 3 back office (`admin.spec`):** creates its data through the storefront: a fresh guest, or a throwaway customer for `@account` tests, who gets three lists. Scenario 2 resets the grid filter it sets.
 
 **Ngrok:** the config sends `ngrok-skip-browser-warning`, so free tunnels don't show their interstitial page.
 
@@ -74,3 +79,19 @@ Scenario 11 needs no preparation: it disables `SWL_TOGGLE_PRODUCT_ID` through th
 | Review 2 P1: CSRF bound to the guest session | `security.spec` › CSRF (cross-guest token, missing/wrong token, rotation on login) |
 | Review 2 P1: core purchase checks | `purchase-rules.spec` (minimal quantity, customisation, group restriction, stock, mixed selection) |
 | Plan §2.4: ownership | `security.spec` › Ownership (foreign item IDs, GET refused) |
+
+## Coverage, Stage 3 (back office)
+
+| Task 3 scenario | Test |
+|---|---|
+| 1 Listing (name, owner, count, View) | `admin.spec` › Scenarios 1, 6, 7 |
+| 2 One customer, several lists | `admin.spec` › Scenarios 2, 3, 4, 5, 8 (three lists, each its own row) |
+| 3 Detail (name, owner, products, count) | `admin.spec` › Scenarios 2, 3, 4, 5, 8 |
+| 4 Product info (name, loaded image, current price) | `admin.spec` › Scenarios 2, 3, 4, 5, 8 |
+| 5 Registered owner (name, email) | `admin.spec` › Scenarios 2, 3, 4, 5, 8 |
+| 6 Guest ("Guest", no identifier) | `admin.spec` › Scenarios 1, 6, 7 |
+| 7 Empty list (metadata, message, count 0) | `admin.spec` › Scenarios 1, 6, 7 |
+| 8 Search by customer (email, name; filter kept on Back) | `admin.spec` › Scenarios 2, 3, 4, 5, 8 |
+| 9 Restricted access | `admin.spec` › storefront session → login; restricted profile → denied (optional) |
+| 10 Read-only | `admin.spec` › Scenario 10 (no forms or buttons; POST/PUT/DELETE refused) |
+| Unknown/out-of-scope list | `admin.spec` › generic 404 without list data |

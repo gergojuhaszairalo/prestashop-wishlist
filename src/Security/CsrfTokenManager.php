@@ -24,15 +24,10 @@ class CsrfTokenManager
     /** Keys used by 1.0.0 to store the token; removed from visitors' cookies on sight. */
     private const LEGACY_KEYS = ['swl_csrf', 'swl_csrf_owner'];
 
-    /** @var Cookie */
-    private $cookie;
-    /** @var string */
-    private $secret;
-
-    public function __construct(Cookie $cookie, string $secret)
-    {
-        $this->cookie = $cookie;
-        $this->secret = $secret;
+    public function __construct(
+        private readonly Cookie $cookie,
+        private readonly string $secret,
+    ) {
     }
 
     /** Container factory (config/common.yml): the cookie is the request's, the secret _COOKIE_KEY_. */

@@ -10,18 +10,11 @@ namespace Summit\Wishlist\Owner;
  */
 final class WishlistOwner
 {
-    /** @var int */
-    private $shopId;
-    /** @var string */
-    private $ownerKey;
-    /** @var int|null */
-    private $customerId;
-
-    public function __construct(int $shopId, string $ownerKey, ?int $customerId)
-    {
-        $this->shopId = $shopId;
-        $this->ownerKey = $ownerKey;
-        $this->customerId = $customerId;
+    public function __construct(
+        private readonly int $shopId,
+        private readonly string $ownerKey,
+        private readonly ?int $customerId,
+    ) {
     }
 
     public function getShopId(): int

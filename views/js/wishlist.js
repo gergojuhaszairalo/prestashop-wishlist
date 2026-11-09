@@ -51,8 +51,12 @@
 
   var TRIGGER = '[data-summitwishlist-action]';
 
+  /** Latest server-confirmed state per variant ("product-attribute"), re-applied to re-rendered triggers. */
+  var knownState = {};
+
   /** Sets saved/unsaved on every trigger for this exact variant, using the server-resolved IDs. */
   function setSaved(productId, attributeId, saved) {
+    knownState[Number(productId) + '-' + Number(attributeId)] = saved;
     document.querySelectorAll(TRIGGER + '[data-sw-product="' + productId + '"]').forEach(function (trigger) {
       // PDP triggers carry the rendered combination; a refreshed PDP re-renders with server state anyway.
       if (Number(trigger.getAttribute('data-sw-attribute')) !== Number(attributeId)) {
@@ -141,6 +145,14 @@
         // The visitor got a second list in another tab since this page rendered.
         if (json && json.code === 'needs_picker' && json.picker_url) {
           openPicker(json.picker_url, trigger);
+          return;
+        }
+        // The PDP trigger stands for the combination selected in the form, which the server
+        // resolved from group[]. If the theme hasn't re-rendered it yet, adopt that combination.
+        if (json && json.success === true && trigger.isConnected && trigger.classList.contains('sw-pdp__trigger')
+          && Number(trigger.getAttribute('data-sw-product')) === Number(json.id_product)) {
+          trigger.setAttribute('data-sw-attribute', String(json.id_product_attribute));
+          setSaved(json.id_product, json.id_product_attribute, json.saved === true);
         }
       })
       .catch(function () { notify([(window.summitWishlistI18n || {}).error || 'Error'], false); })
@@ -509,8 +521,20 @@
       return;
     }
     var fresh = new DOMParser().parseFromString(html, 'text/html').querySelector('.sw-pdp');
-    if (fresh) {
-      current.replaceWith(document.importNode(fresh, true));
+    if (!fresh) {
+      return;
+    }
+    current.replaceWith(document.importNode(fresh, true));
+    // The refresh may have been rendered before a wishlist change that answered first: the
+    // newer, server-confirmed state for this variant wins over the refreshed markup.
+    var trigger = document.querySelector('.sw-pdp ' + TRIGGER);
+    if (trigger) {
+      var productId = trigger.getAttribute('data-sw-product');
+      var attributeId = trigger.getAttribute('data-sw-attribute');
+      var key = Number(productId) + '-' + Number(attributeId);
+      if (Object.prototype.hasOwnProperty.call(knownState, key)) {
+        setSaved(productId, attributeId, knownState[key]);
+      }
     }
   }
 

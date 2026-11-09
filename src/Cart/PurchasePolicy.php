@@ -18,15 +18,10 @@ use Validate;
  */
 class PurchasePolicy
 {
-    /** @var Context */
-    private $context;
-    /** @var ProductCatalogInterface */
-    private $catalog;
-
-    public function __construct(Context $context, ProductCatalogInterface $catalog)
-    {
-        $this->context = $context;
-        $this->catalog = $catalog;
+    public function __construct(
+        private readonly Context $context,
+        private readonly ProductCatalogInterface $catalog,
+    ) {
     }
 
     /**

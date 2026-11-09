@@ -14,12 +14,9 @@ class OwnerResolver
 {
     private const GUEST_COOKIE_KEY = 'swl_guest';
 
-    /** @var Context */
-    private $context;
-
-    public function __construct(Context $context)
-    {
-        $this->context = $context;
+    public function __construct(
+        private readonly Context $context,
+    ) {
     }
 
     public function resolve(): WishlistOwner

@@ -34,10 +34,9 @@ class Summitwishlist extends Module
 {
     public const TRANSLATION_DOMAIN = 'Modules.Summitwishlist.Shop';
 
-    /** @var ServiceFactory|null */
-    private $services;
+    private ?ServiceFactory $services = null;
     /** @var array[]|null the visitor's lists, read once per request for header and triggers */
-    private $ownerLists;
+    private ?array $ownerLists = null;
 
     public function __construct()
     {
